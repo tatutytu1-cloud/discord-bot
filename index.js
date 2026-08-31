@@ -567,7 +567,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const serverButton = new ButtonBuilder()
         .setLabel('Sent from DonutSMP Sells')
         .setStyle(ButtonStyle.Link)
-        .setURL(https://discord.gg/donutsells);
+        .setURL('https://discord.gg/donutsells');
       
       const row = new ActionRowBuilder().addComponents(serverButton);
       
