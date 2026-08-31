@@ -93,7 +93,7 @@ async function createTicket(interaction, ticketType) {
   const category = await getTicketCategory(guild);
 
   // Check existing ticket
-  const existing = guild.channels.cache.find(c => c.name === `ticket-${user.id}`);
+  const existing = guild.channels.cache.find(c => c.name.includes(user.username.toLowerCase().replace(/[^a-z0-9]/g, '')));
   if (existing) {
     return interaction.reply({ content: `You already have a ticket open: ${existing}`, ephemeral: true });
   }
@@ -112,9 +112,14 @@ async function createTicket(interaction, ticketType) {
     });
   }
 
+  // Create channel name
+  const safeUsername = user.username.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const shortType = ticketType.toLowerCase().split(' ')[0].replace(/[^a-z0-9]/g, '');
+  const channelName = `${shortType}-${safeUsername}`;
+
   // Create channel
   const channel = await guild.channels.create({
-    name: `ticket-${user.id}`,
+    name: channelName,
     type: ChannelType.GuildText,
     parent: category.id,
     permissionOverwrites: permissionOverwrites
@@ -461,8 +466,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (commandName === 'dm') {
       const user = interaction.options.getUser('user');
       const message = interaction.options.getString('message');
+      
+      const dmEmbed = new EmbedBuilder()
+        .setTitle('DonutSMP Sells')
+        .setDescription(message)
+        .setColor(0x00AE86)
+        .setFooter({ text: 'DonutSells Manager' })
+        .setTimestamp();
+      
       try {
-        await user.send(message);
+        await user.send({ embeds: [dmEmbed] });
         await interaction.reply({ content: `DM sent to ${user.tag}!`, ephemeral: true });
       } catch (error) {
         await interaction.reply({ content: 'Could not send DM (user may have DMs disabled).', ephemeral: true });
