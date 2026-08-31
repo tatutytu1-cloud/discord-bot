@@ -21,7 +21,7 @@ const {
 } = require('discord.js');
 
 // ==================== CONFIG ====================
-const TICKET_CATEGORY_NAME = 'Tickets';
+const TICKET_CATEGORY_ID = '1539692257979142185'; // Kategorie pro tickety
 
 // Staff role IDs that can claim/close tickets
 const STAFF_ROLE_IDS = [
@@ -36,10 +36,19 @@ const STAFF_ROLE_IDS = [
   '1543370588725186672'
 ];
 
+// Roles to ping when ticket is created
+const PING_ROLE_IDS = [
+  '1543369605333131274',
+  '1543370588725186672'
+];
+
 // Channel IDs
 const TICKET_LOGS_CHANNEL_ID = '1539942205475528734';
 const GIVEAWAY_CHANNEL_ID = '1539694123353772183';
 const TICKET_PANEL_CHANNEL_ID = '1539692765716283403';
+
+// Server invite link
+const SERVER_INVITE = 'https://discord.gg/TVUJ_INVITE_LINK'; // ZMĚŇ!
 
 // Ticket types
 const TICKET_TYPES = {
@@ -73,10 +82,10 @@ function isStaff(member) {
 }
 
 async function getTicketCategory(guild) {
-  let category = guild.channels.cache.find(c => c.name === TICKET_CATEGORY_NAME && c.type === ChannelType.GuildCategory);
-  if (!category) {
+  let category = guild.channels.cache.get(TICKET_CATEGORY_ID);
+  if (!category || category.type !== ChannelType.GuildCategory) {
     category = await guild.channels.create({
-      name: TICKET_CATEGORY_NAME,
+      name: 'Tickets',
       type: ChannelType.GuildCategory,
       permissionOverwrites: [
         { id: guild.roles.everyone, deny: [PermissionFlagsBits.ViewChannel] }
@@ -117,7 +126,7 @@ async function createTicket(interaction, ticketType) {
   const shortType = ticketType.toLowerCase().split(' ')[0].replace(/[^a-z0-9]/g, '');
   const channelName = `${shortType}-${safeUsername}`;
 
-  // Create channel
+  // Create channel in the ticket category
   const channel = await guild.channels.create({
     name: channelName,
     type: ChannelType.GuildText,
@@ -140,14 +149,15 @@ async function createTicket(interaction, ticketType) {
 
   const row = new ActionRowBuilder().addComponents(claimButton, closeButton);
 
-  // Welcome message
+  // Welcome message with ping
+  const pingRoles = PING_ROLE_IDS.map(id => `<@&${id}>`).join(' ');
   const welcomeEmbed = new EmbedBuilder()
     .setTitle(`${ticketType} Ticket`)
     .setDescription('Hello! Our Staff Team is currently reviewing your Ticket and will respond soon! After 12 hours of no response, please Ping someone from our Staff Team! Thank You!')
     .setColor(0x00AE86)
     .setFooter({ text: 'DonutSells Manager' });
 
-  await channel.send({ embeds: [welcomeEmbed], components: [row] });
+  await channel.send({ content: `${pingRoles}`, embeds: [welcomeEmbed], components: [row] });
 
   await interaction.reply({ content: `Ticket created: ${channel}`, ephemeral: true });
 }
@@ -276,8 +286,8 @@ client.once(Events.ClientReady, async (c) => {
     const ticketPanelChannel = c.channels.cache.get(TICKET_PANEL_CHANNEL_ID);
     if (ticketPanelChannel) {
       const embed = new EmbedBuilder()
-        .setTitle('Support Tickets')
-        .setDescription('Please select the type of support you need:')
+        .setTitle('**Create a Ticket**')
+        .setDescription('**Create a Ticket with the button below\nAfter creation, please wait until someone from Staff Team will *Claim* your Ticket. Thank You for understanding.**')
         .setColor(0x00AE86);
 
       const select = new StringSelectMenuBuilder()
@@ -365,8 +375,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
     // /ticket
     if (commandName === 'ticket') {
       const embed = new EmbedBuilder()
-        .setTitle('Support Tickets')
-        .setDescription('Please select the type of support you need:')
+        .setTitle('**Create a Ticket**')
+        .setDescription('**Create a Ticket with the button below\nAfter creation, please wait until someone from Staff Team will *Claim* your Ticket. Thank You for understanding.**')
         .setColor(0x00AE86);
 
       const select = new StringSelectMenuBuilder()
@@ -474,8 +484,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setFooter({ text: 'DonutSells Manager' })
         .setTimestamp();
       
+      const serverButton = new ButtonBuilder()
+        .setLabel('Sent from DonutSMP Sells')
+        .setStyle(ButtonStyle.Link)
+        .setURL(SERVER_INVITE);
+      
+      const row = new ActionRowBuilder().addComponents(serverButton);
+      
       try {
-        await user.send({ embeds: [dmEmbed] });
+        await user.send({ embeds: [dmEmbed], components: [row] });
         await interaction.reply({ content: `DM sent to ${user.tag}!`, ephemeral: true });
       } catch (error) {
         await interaction.reply({ content: 'Could not send DM (user may have DMs disabled).', ephemeral: true });
