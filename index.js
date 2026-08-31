@@ -17,13 +17,15 @@ const {
   WebhookClient,
   SlashCommandBuilder,
   REST,
-  Routes
+  Routes,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle
 } = require('discord.js');
 
 // ==================== CONFIG ====================
-const TICKET_CATEGORY_ID = '1539692257979142185'; // Kategorie pro tickety
+const TICKET_CATEGORY_ID = '1539692257979142185';
 
-// Staff role IDs that can claim/close tickets
 const STAFF_ROLE_IDS = [
   '1539698431021424650',
   '1543348513558110338',
@@ -36,29 +38,47 @@ const STAFF_ROLE_IDS = [
   '1543370588725186672'
 ];
 
-// Roles to ping when ticket is created
 const PING_ROLE_IDS = [
   '1543369605333131274',
   '1543370588725186672'
 ];
 
-// Channel IDs
 const TICKET_LOGS_CHANNEL_ID = '1539942205475528734';
 const GIVEAWAY_CHANNEL_ID = '1539694123353772183';
 const TICKET_PANEL_CHANNEL_ID = '1539692765716283403';
+const SUGGESTION_PANEL_CHANNEL_ID = '1539949080493694986'; // Kde je panel
+const SUGGESTIONS_LOGS_CHANNEL_ID = '1539969669811933204'; // Kam se posílají suggesce
 
-// Server invite link
 const SERVER_INVITE = 'https://discord.gg/TVUJ_INVITE_LINK'; // ZMĚŇ!
 
-// Ticket types
 const TICKET_TYPES = {
-  'purchase': '💸 Purchase',
-  'support': '🌐 Support',
-  'media': '📸 Media',
-  'partnership': '👥 Partnership',
-  'sponsor': '💎 Sponsor',
-  'invite-boost': '🎁 Invite/Boost Reward Claim',
-  'claim': '🎉 Giveaway Claim'
+  'purchase': 'purchase',
+  'support': 'support',
+  'media': 'media',
+  'partnership': 'partnership',
+  'sponsor': 'sponsor',
+  'invite-boost': 'invite-boost',
+  'claim': 'claim'
+};
+
+const TICKET_EMOJIS = {
+  'purchase': '💸',
+  'support': '🌐',
+  'media': '📸',
+  'partnership': '👥',
+  'sponsor': '💎',
+  'invite-boost': '🎁',
+  'claim': '🎉'
+};
+
+const TICKET_LABELS = {
+  'purchase': 'Purchase',
+  'support': 'Support',
+  'media': 'Media',
+  'partnership': 'Partnership',
+  'sponsor': 'Sponsor',
+  'invite-boost': 'Invite/Boost Reward Claim',
+  'claim': 'Giveaway Claim'
 };
 
 // ==================== CLIENT SETUP ====================
@@ -73,10 +93,8 @@ const client = new Client({
   ]
 });
 
-// ==================== GIVEAWAY STORAGE ====================
 const giveaways = new Map();
 
-// ==================== HELPER FUNCTIONS ====================
 function isStaff(member) {
   return STAFF_ROLE_IDS.some(roleId => member.roles.cache.has(roleId));
 }
@@ -101,19 +119,20 @@ async function createTicket(interaction, ticketType) {
   const user = interaction.user;
   const category = await getTicketCategory(guild);
 
-  // Check existing ticket
-  const existing = guild.channels.cache.find(c => c.name.includes(user.username.toLowerCase().replace(/[^a-z0-9]/g, '')));
+  const safeUsername = user.username.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const shortType = TICKET_TYPES[ticketType] || ticketType.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const channelName = `${shortType}-${safeUsername}`;
+
+  const existing = guild.channels.cache.find(c => c.name === channelName);
   if (existing) {
     return interaction.reply({ content: `You already have a ticket open: ${existing}`, ephemeral: true });
   }
 
-  // Build permission overwrites
   const permissionOverwrites = [
     { id: guild.roles.everyone, deny: [PermissionFlagsBits.ViewChannel] },
     { id: user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
   ];
 
-  // Add staff roles
   for (const roleId of STAFF_ROLE_IDS) {
     permissionOverwrites.push({
       id: roleId,
@@ -121,12 +140,6 @@ async function createTicket(interaction, ticketType) {
     });
   }
 
-  // Create channel name
-  const safeUsername = user.username.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const shortType = ticketType.toLowerCase().split(' ')[0].replace(/[^a-z0-9]/g, '');
-  const channelName = `${shortType}-${safeUsername}`;
-
-  // Create channel in the ticket category
   const channel = await guild.channels.create({
     name: channelName,
     type: ChannelType.GuildText,
@@ -134,7 +147,6 @@ async function createTicket(interaction, ticketType) {
     permissionOverwrites: permissionOverwrites
   });
 
-  // Buttons
   const claimButton = new ButtonBuilder()
     .setCustomId('claim_ticket')
     .setLabel('Claim')
@@ -149,10 +161,12 @@ async function createTicket(interaction, ticketType) {
 
   const row = new ActionRowBuilder().addComponents(claimButton, closeButton);
 
-  // Welcome message with ping
   const pingRoles = PING_ROLE_IDS.map(id => `<@&${id}>`).join(' ');
+  const emoji = TICKET_EMOJIS[ticketType] || '🎫';
+  const label = TICKET_LABELS[ticketType] || ticketType;
+
   const welcomeEmbed = new EmbedBuilder()
-    .setTitle(`${ticketType} Ticket`)
+    .setTitle(`${emoji} ${label} Ticket`)
     .setDescription('Hello! Our Staff Team is currently reviewing your Ticket and will respond soon! After 12 hours of no response, please Ping someone from our Staff Team! Thank You!')
     .setColor(0x00AE86)
     .setFooter({ text: 'DonutSells Manager' });
@@ -166,11 +180,9 @@ async function closeTicket(interaction) {
   const channel = interaction.channel;
   const logsChannel = interaction.guild.channels.cache.get(TICKET_LOGS_CHANNEL_ID);
 
-  // Collect all messages
   const messages = await channel.messages.fetch({ limit: 100 });
   const transcript = messages.reverse().map(m => `[${m.createdAt.toISOString()}] ${m.author.tag}: ${m.content}`).join('\n');
 
-  // Send transcript to logs
   if (logsChannel) {
     const transcriptEmbed = new EmbedBuilder()
       .setTitle(`Ticket Closed: ${channel.name}`)
@@ -203,7 +215,6 @@ async function endGiveaway(giveawayId) {
     return;
   }
 
-  // Random winners
   const winners = [];
   const pool = [...participants];
   for (let i = 0; i < Math.min(winnersCount, pool.length); i++) {
@@ -211,7 +222,6 @@ async function endGiveaway(giveawayId) {
     winners.push(pool.splice(randomIndex, 1)[0]);
   }
 
-  // Announce winners
   for (const winnerId of winners) {
     const winnerEmbed = new EmbedBuilder()
       .setTitle('🎉 Giveaway Winner!')
@@ -235,15 +245,18 @@ async function endGiveaway(giveawayId) {
 client.once(Events.ClientReady, async (c) => {
   console.log(`✅ Bot logged in as ${c.user.tag}`);
 
-  // Set bot profile
   await c.user.setUsername('DonutSells Manager').catch(console.error);
-  await c.user.setActivity('DonutSMP Sells', { type: 3 }); // Watching
+  await c.user.setActivity('DonutSMP Sells', { type: 3 });
 
-  // Register slash commands
   const commands = [
     new SlashCommandBuilder()
       .setName('ticket')
       .setDescription('Create a ticket panel with dropdown')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+    new SlashCommandBuilder()
+      .setName('suggest')
+      .setDescription('Create a suggestion panel')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     new SlashCommandBuilder()
@@ -281,7 +294,7 @@ client.once(Events.ClientReady, async (c) => {
     console.error('Error registering commands:', error);
   }
 
-  // Auto-create ticket panel in the ticket channel
+  // Auto-create ticket panel
   try {
     const ticketPanelChannel = c.channels.cache.get(TICKET_PANEL_CHANNEL_ID);
     if (ticketPanelChannel) {
@@ -309,23 +322,42 @@ client.once(Events.ClientReady, async (c) => {
   } catch (error) {
     console.error('Error creating ticket panel:', error);
   }
+
+  // Auto-create suggestion panel
+  try {
+    const suggestionPanelChannel = c.channels.cache.get(SUGGESTION_PANEL_CHANNEL_ID);
+    if (suggestionPanelChannel) {
+      const suggestEmbed = new EmbedBuilder()
+        .setTitle('**Suggestions**')
+        .setDescription('**If you have any suggestion what should we add into our server/bot, please use the *button* below**')
+        .setColor(0x9B59B6);
+
+      const suggestButton = new ButtonBuilder()
+        .setCustomId('open_suggestion_modal')
+        .setLabel('Suggest')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('💡');
+
+      const row = new ActionRowBuilder().addComponents(suggestButton);
+      await suggestionPanelChannel.send({ embeds: [suggestEmbed], components: [row] });
+      console.log('✅ Suggestion panel created');
+    }
+  } catch (error) {
+    console.error('Error creating suggestion panel:', error);
+  }
 });
 
 // ==================== EVENT: INTERACTION CREATE ====================
 client.on(Events.InteractionCreate, async (interaction) => {
-  // Handle string select menu (ticket dropdown)
   if (interaction.isStringSelectMenu()) {
     if (interaction.customId === 'ticket_type') {
       const selected = interaction.values[0];
-      const ticketType = TICKET_TYPES[selected] || selected;
-      await createTicket(interaction, ticketType);
+      await createTicket(interaction, selected);
     }
     return;
   }
 
-  // Handle buttons
   if (interaction.isButton()) {
-    // Claim ticket button
     if (interaction.customId === 'claim_ticket') {
       if (!isStaff(interaction.member)) {
         return interaction.reply({ content: 'Only staff can claim tickets!', ephemeral: true });
@@ -334,7 +366,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.reply({ content: `Ticket claimed by ${interaction.user}!` });
     }
 
-    // Close ticket button
     if (interaction.customId === 'close_ticket') {
       if (!isStaff(interaction.member)) {
         return interaction.reply({ content: 'Only staff can close tickets!', ephemeral: true });
@@ -342,7 +373,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await closeTicket(interaction);
     }
 
-    // Giveaway enter button
     if (interaction.customId.startsWith('enter_giveaway_')) {
       const giveawayId = interaction.customId.split('_')[2];
       const giveaway = giveaways.get(giveawayId);
@@ -357,22 +387,59 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.reply({ content: 'You entered the giveaway! Good luck! 🎉', ephemeral: true });
     }
 
-    // Giveaway claim button
     if (interaction.customId.startsWith('claim_giveaway_')) {
       const parts = interaction.customId.split('_');
       const winnerId = parts[parts.length - 1];
       if (interaction.user.id !== winnerId) {
         return interaction.reply({ content: 'This claim button is not for you!', ephemeral: true });
       }
-      await createTicket(interaction, '🎉 Giveaway Claim');
+      await createTicket(interaction, 'claim');
+    }
+
+    if (interaction.customId === 'open_suggestion_modal') {
+      const modal = new ModalBuilder()
+        .setCustomId('suggestion_modal')
+        .setTitle('Submit a Suggestion');
+
+      const suggestionInput = new TextInputBuilder()
+        .setCustomId('suggestion_text')
+        .setLabel('Your Suggestion')
+        .setStyle(TextInputStyle.Paragraph)
+        .setPlaceholder('Write your suggestion here...')
+        .setMaxLength(1000)
+        .setRequired(true);
+
+      const row = new ActionRowBuilder().addComponents(suggestionInput);
+      modal.addComponents(row);
+
+      await interaction.showModal(modal);
     }
   }
 
-  // Handle slash commands
+  if (interaction.isModalSubmit()) {
+    if (interaction.customId === 'suggestion_modal') {
+      const suggestion = interaction.fields.getTextInputValue('suggestion_text');
+      
+      const suggestionEmbed = new EmbedBuilder()
+        .setTitle('💡 New Suggestion')
+        .setDescription(suggestion)
+        .setColor(0x9B59B6)
+        .setAuthor({ name: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() })
+        .setTimestamp();
+
+      const suggestionsLogsChannel = interaction.guild.channels.cache.get(SUGGESTIONS_LOGS_CHANNEL_ID);
+      if (suggestionsLogsChannel) {
+        await suggestionsLogsChannel.send({ embeds: [suggestionEmbed] });
+        await interaction.reply({ content: 'Your suggestion has been submitted!', ephemeral: true });
+      } else {
+        await interaction.reply({ content: 'Suggestions channel not found!', ephemeral: true });
+      }
+    }
+  }
+
   if (interaction.isCommand()) {
     const { commandName } = interaction;
 
-    // /ticket
     if (commandName === 'ticket') {
       const embed = new EmbedBuilder()
         .setTitle('**Create a Ticket**')
@@ -396,7 +463,23 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.reply({ content: 'Ticket panel created!', ephemeral: true });
     }
 
-    // /gcreate
+    if (commandName === 'suggest') {
+      const suggestEmbed = new EmbedBuilder()
+        .setTitle('**Suggestions**')
+        .setDescription('**If you have any suggestion what should we add into our server/bot, please use the *button* below**')
+        .setColor(0x9B59B6);
+
+      const suggestButton = new ButtonBuilder()
+        .setCustomId('open_suggestion_modal')
+        .setLabel('Suggest')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('💡');
+
+      const row = new ActionRowBuilder().addComponents(suggestButton);
+      await interaction.channel.send({ embeds: [suggestEmbed], components: [row] });
+      await interaction.reply({ content: 'Suggestion panel created!', ephemeral: true });
+    }
+
     if (commandName === 'gcreate') {
       const name = interaction.options.getString('name');
       const duration = interaction.options.getInteger('duration');
@@ -421,7 +504,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const row = new ActionRowBuilder().addComponents(enterButton);
 
-      // Send to giveaway channel
       const giveawayChannel = interaction.guild.channels.cache.get(GIVEAWAY_CHANNEL_ID);
       if (!giveawayChannel) {
         return interaction.reply({ content: 'Giveaway channel not found!', ephemeral: true });
@@ -441,7 +523,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.reply({ content: 'Giveaway created!', ephemeral: true });
     }
 
-    // /embed
     if (commandName === 'embed') {
       const channel = interaction.options.getChannel('channel');
       const title = interaction.options.getString('title');
@@ -472,7 +553,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
     }
 
-    // /dm
     if (commandName === 'dm') {
       const user = interaction.options.getUser('user');
       const message = interaction.options.getString('message');
@@ -487,7 +567,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const serverButton = new ButtonBuilder()
         .setLabel('Sent from DonutSMP Sells')
         .setStyle(ButtonStyle.Link)
-        .setURL(SERVER_INVITE);
+        .setURL(https://discord.gg/donutsells);
       
       const row = new ActionRowBuilder().addComponents(serverButton);
       
