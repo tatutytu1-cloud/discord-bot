@@ -55,6 +55,12 @@ const INVITE_TRACKING_CHANNEL_ID = '1539999179609481366';
 const APPEALS_LOGS_CHANNEL_ID = '1539969669811933204';
 const CASHOUT_PANEL_CHANNEL_ID = '1544425577577058444';
 
+// New panel channels
+const RULES_CHANNEL_ID = '1539693023061876806';
+const PRICES_CHANNEL_ID = '1539697766257659954';
+const MEDIA_REQUIREMENTS_CHANNEL_ID = '1539693647443001454';
+const REWARDS_INFO_CHANNEL_ID = '1539999315307667456';
+
 const SERVER_INVITE = 'https://discord.gg/pingpongshangout';
 const BOT_NAME = "PingPong's Hangout Manager";
 
@@ -533,6 +539,152 @@ client.once(Events.ClientReady, async (c) => {
   }
 
   // ==================== COOL PANELS ====================
+
+  // Rules Panel
+  try {
+    const rulesChannel = c.channels.cache.get(RULES_CHANNEL_ID);
+    if (rulesChannel) {
+      const embed = new EmbedBuilder()
+        .setTitle('📜 **SERVER RULES** 📜')
+        .setDescription(
+          '@everyone\n\n' +
+          '**Please read the rules below.**\n\n' +
+          '🚫 **Advertising**\n' +
+          'We do not allow any forms of advertising, without Staff Approval.\n\n' +
+          '👮 **Respect the staff team**\n' +
+          'Be polite to our staff team. They\'re here to help. Use manners when asking for support.\n\n' +
+          '📢 **Mentions**\n' +
+          'We do not allow mass mentions, or randomly pinging users without reason.\n\n' +
+          '🆘 **Support**\n' +
+          'When asking for support please ensure you are giving us as much information as you can including screenshots, this will help us get to the root of your issue!\n\n' +
+          '🚫 **Discrimination not tolerated**\n' +
+          'We do not tolerate any form of racism, homophobia or sexism or generally any other -ism or phobia.\n\n' +
+          '📧 **Spamming**\n' +
+          'Spamming, Character Flooding, Voguer language, Cussing, and harassing any members/channels on our Discord is prohibited.\n\n' +
+          '🚫 **Don\'t ping staff!**\n' +
+          'Unless its urgent, pinging staff when you opened a ticket will make us not answer for longer.\n\n' +
+          '🔧 **Use support channels for help**\n' +
+          'Open a ticket for help, we have a turn around time of up to 48 hours for some tickets when busy.'
+        )
+        .setColor(0xFF0000)
+        .setFooter({ text: BOT_NAME, iconURL: c.user.displayAvatarURL() })
+        .setTimestamp();
+
+      await rulesChannel.send({ embeds: [embed] });
+      console.log('✅ Rules panel created');
+    }
+  } catch (error) {
+    console.error('Error creating rules panel:', error);
+  }
+
+  // Prices Panel
+  try {
+    const pricesChannel = c.channels.cache.get(PRICES_CHANNEL_ID);
+    if (pricesChannel) {
+      const embed = new EmbedBuilder()
+        .setTitle('💰 **PRICES** 💰')
+        .setDescription(
+          'These are the prices we offer for now. Each day can bring discounts or discount codes. Check our Promo Codes Channel everyday to be well informed.\n\n' +
+          '**SELL**\n' +
+          '50M - 1.5$\n' +
+          '100M - 3$\n' +
+          '150M - 5$\n' +
+          '200M - 6.5$\n' +
+          '250M - 7.5$\n' +
+          '500M - 13$\n' +
+          '1B - 26$\n' +
+          'Elytra (NON DUPED!) - 13$\n\n' +
+          'We accept PayPal/Card/Giftcards/LTC/BTC/Stripe\n\n' +
+          'If you are interested, please open a ***ticket.***\n\n' +
+          '**BUY**\n' +
+          '1B/14$'
+        )
+        .setColor(0xFFD700)
+        .setFooter({ text: BOT_NAME, iconURL: c.user.displayAvatarURL() })
+        .setTimestamp();
+
+      await pricesChannel.send({ embeds: [embed] });
+      console.log('✅ Prices panel created');
+    }
+  } catch (error) {
+    console.error('Error creating prices panel:', error);
+  }
+
+  // Media Requirements Panel
+  try {
+    const mediaChannel = c.channels.cache.get(MEDIA_REQUIREMENTS_CHANNEL_ID);
+    if (mediaChannel) {
+      const embed = new EmbedBuilder()
+        .setTitle('📸 **MEDIA REQUIREMENTS** 📸')
+        .setDescription(
+          '**These are the current Media Requirements. These can change depending on the spot availability.**\n\n' +
+          '📺 At least **500 subscribers** when posting on YouTube.\n\n' +
+          '📱 At least **1000 followers** when posting on TikTok or Instagram.\n\n' +
+          '🎬 Post at least **2 videos per week**.\n\n' +
+          '✅ Need to have **verified Discord account** (Email Address).\n\n' +
+          '🎮 Play on **DonutSMP**.\n\n' +
+          '🔗 Put our **Discord server link** visible on screen during videos/streams for full duration and make it completely visible and readable.\n\n' +
+          '📝 Put our **Discord server link** in your channel BIO.'
+        )
+        .setColor(0x9B59B6)
+        .setFooter({ text: BOT_NAME, iconURL: c.user.displayAvatarURL() })
+        .setTimestamp();
+
+      await mediaChannel.send({ embeds: [embed] });
+      console.log('✅ Media requirements panel created');
+    }
+  } catch (error) {
+    console.error('Error creating media panel:', error);
+  }
+
+  // Rewards Info Panel
+  try {
+    const rewardsChannel = c.channels.cache.get(REWARDS_INFO_CHANNEL_ID);
+    if (rewardsChannel) {
+      const embed = new EmbedBuilder()
+        .setTitle('🎁 **HOW TO EARN REWARDS** 🎁')
+        .setDescription(
+          '**You can earn saved rewards in two ways:**\n\n' +
+          '💌 **Invite Someone** – When a user joins through YOUR invite link, you get 1 Invite Reward.\n\n' +
+          '🚀 **Boost The Server** – When you boost our server, you get 1 Boost Reward.\n\n' +
+          '**Saving Your Rewards:**\n\n' +
+          'When someone joins through your link, you\'ll see two buttons:\n' +
+          '✅ **CLAIM** – Opens a ticket immediately to claim your reward.\n' +
+          '💾 **SAVE IT** – Saves your reward to your balance for later.\n\n' +
+          '💡 *Pro Tip: Save up multiple rewards and cash them out all at once!*\n\n' +
+          '**Checking Your Balance:**\n\n' +
+          'Head over to the Cashout Panel channel and click **CHECK BALANCE**.\n\n' +
+          'You\'ll see:\n' +
+          '💌 How many **Invite Rewards** you have saved\n' +
+          '🚀 How many **Boost Rewards** you have saved\n' +
+          '✨ Your **Total** combined rewards\n\n' +
+          '**Cashing Out:**\n\n' +
+          'When you\'re ready to claim your rewards:\n' +
+          '1️⃣ Go to the **Cashout Panel** channel\n' +
+          '2️⃣ Click **CASH OUT**\n' +
+          '3️⃣ Choose what you want to claim:\n' +
+          '🚀 **BOOST** – Cash out your saved boosts\n' +
+          '💌 **INVITE** – Cash out your saved invites\n' +
+          '4️⃣ A **ticket will be opened** with all your saved rewards\n' +
+          '5️⃣ Our **Staff Team** will review and process your claim\n\n' +
+          '**Why Save Your Rewards?**\n\n' +
+          '💎 **Bigger payouts** – Cash out multiple rewards at once\n' +
+          '📊 **Better organization** – Keep track of everything in one place\n' +
+          '⚡ **Flexibility** – Claim when YOU want, not when you earn it\n\n' +
+          '**Need Help?**\n\n' +
+          'If you have any questions about the Cashout System, open a **Support Ticket** and our Staff Team will help you out!\n\n' +
+          '🎉 **Happy Earning!** 🎉'
+        )
+        .setColor(0x9B59B6)
+        .setFooter({ text: BOT_NAME, iconURL: c.user.displayAvatarURL() })
+        .setTimestamp();
+
+      await rewardsChannel.send({ embeds: [embed] });
+      console.log('✅ Rewards info panel created');
+    }
+  } catch (error) {
+    console.error('Error creating rewards panel:', error);
+  }
 
   // Ticket Panel
   try {
