@@ -1,5 +1,5 @@
-// ==================== DONUTSELLS MANAGER BOT ====================
-// Most Powerful Bot of DonutSMP Sells
+// ==================== PINGPONG'S HANGOUT MANAGER BOT ====================
+// Most Powerful Bot of PingPong's Hangout
 // Made by pingpongble
 
 require('dotenv').config();
@@ -59,7 +59,9 @@ const APPEALS_LOGS_CHANNEL_ID = '1539969669811933204';
 const TRIAL_STAFF_ROLE_ID = '1543370588725186672';
 const TRIAL_ADMIN_ROLE_ID = '1543369605333131274';
 
-const SERVER_INVITE = 'https://discord.gg/donutsells';
+const SERVER_INVITE = 'https://discord.gg/pingpongshangout';
+
+const BOT_NAME = "PingPong's Hangout Manager";
 
 const TICKET_TYPES = {
   'purchase': 'purchase',
@@ -189,7 +191,7 @@ async function createTicket(interaction, ticketType) {
     .setTitle(`${emoji} ${label} Ticket`)
     .setDescription('Hello! Our Staff Team is currently reviewing your Ticket and will respond soon! After 12 hours of no response, please Ping someone from our Staff Team! Thank You!')
     .setColor(0x00AE86)
-    .setFooter({ text: 'DonutSells Manager' });
+    .setFooter({ text: BOT_NAME });
 
   await channel.send({ content: `${pingRoles}`, embeds: [welcomeEmbed], components: [row] });
 
@@ -453,8 +455,8 @@ client.on(Events.InviteCreate, async (invite) => {
 client.once(Events.ClientReady, async (c) => {
   console.log(`✅ Bot logged in as ${c.user.tag}`);
 
-  await c.user.setUsername('DonutSells Manager').catch(() => {});
-  await c.user.setActivity('DonutSMP Sells', { type: 3 });
+  await c.user.setUsername(BOT_NAME).catch(() => {});
+  await c.user.setActivity("PingPong's Hangout", { type: 3 });
 
   for (const guild of c.guilds.cache.values()) {
     try {
@@ -559,7 +561,6 @@ client.once(Events.ClientReady, async (c) => {
 
 // ==================== EVENT: INTERACTION CREATE ====================
 client.on(Events.InteractionCreate, async (interaction) => {
-  // STRING SELECT MENU
   if (interaction.isStringSelectMenu()) {
     if (interaction.customId === 'ticket_type') {
       const selected = interaction.values[0];
@@ -574,7 +575,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
   }
 
-  // BUTTONS
   if (interaction.isButton()) {
     if (interaction.customId === 'claim_ticket') {
       if (!isStaff(interaction.member)) {
@@ -1025,10 +1025,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       try {
         const webhooks = await channel.fetchWebhooks();
-        let webhook = webhooks.find(wh => wh.name === 'DonutSells Manager');
+        let webhook = webhooks.find(wh => wh.name === BOT_NAME);
         if (!webhook) {
           webhook = await channel.createWebhook({
-            name: 'DonutSells Manager',
+            name: BOT_NAME,
             avatar: client.user.displayAvatarURL()
           });
         }
@@ -1045,14 +1045,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const message = interaction.options.getString('message');
       
       const dmEmbed = new EmbedBuilder()
-        .setTitle('DonutSMP Sells')
+        .setTitle("PingPong's Hangout")
         .setDescription(message)
         .setColor(0x00AE86)
-        .setFooter({ text: 'DonutSells Manager' })
+        .setFooter({ text: BOT_NAME })
         .setTimestamp();
       
       const serverButton = new ButtonBuilder()
-        .setLabel('Sent from DonutSMP Sells')
+        .setLabel("Sent from PingPong's Hangout")
         .setStyle(ButtonStyle.Link)
         .setURL(SERVER_INVITE);
       
