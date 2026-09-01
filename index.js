@@ -367,19 +367,22 @@ client.on(Events.MessageCreate, async (message) => {
   
   const channel = message.channel;
   
-  if (!channel.name.startsWith('ticket-') && !channel.name.startsWith('claimed-') && !channel.name.includes('-')) return;
-  
+  // Check if it's a ticket channel
   if (channel.parentId !== TICKET_CATEGORY_ID) return;
+  if (!channel.name.startsWith('ticket-') && !channel.name.startsWith('claimed-')) return;
   
+  // Check if already claimed
   if (claimedTickets.has(channel.id)) return;
   
+  // Check if message author is staff
   if (!isStaff(message.member)) return;
   
+  // Auto-claim
   claimedTickets.set(channel.id, message.author.id);
   
-  const originalName = channel.name;
+  const originalName = channel.name.replace(/^(ticket-|claimed-)/, '');
   const safeStaffName = message.author.username.toLowerCase().replace(/[^a-z0-9]/g, '');
-  await channel.setName(`claimed-${safeStaffName}-${originalName.replace(/^(ticket-|claimed-)/, '')}`).catch(() => {});
+  await channel.setName(`claimed-${safeStaffName}-${originalName}`).catch(() => {});
   
   const claimEmbed = new EmbedBuilder()
     .setTitle('✅ Ticket Claimed')
@@ -517,7 +520,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
       
       claimedTickets.set(interaction.channel.id, interaction.user.id);
       
-      await interaction.channel.setName(`claimed-${interaction.user.username.toLowerCase()}-${interaction.channel.name.split('-').pop()}`).catch(() => {});
+      const originalName = interaction.channel.name.replace(/^(ticket-|claimed-)/, '');
+      const safeStaffName = interaction.user.username.toLowerCase().replace(/[^a-z0-9]/g, '');
+      await interaction.channel.setName(`claimed-${safeStaffName}-${originalName}`).catch(() => {});
       await interaction.reply({ content: `Ticket claimed by ${interaction.user}!` });
     }
 
