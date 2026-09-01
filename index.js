@@ -215,7 +215,7 @@ async function closeTicket(interaction) {
 
   await interaction.reply({ content: 'Closing ticket...', ephemeral: true });
   setTimeout(async () => {
-    await channel.delete().catch(console.error);
+    await channel.delete().catch(() => {});
   }, 5000);
 }
 
@@ -377,7 +377,6 @@ client.on(Events.GuildMemberAdd, async (member) => {
     await channel.send({ embeds: [welcomeEmbed] });
   }
 
-  // Invite tracking
   try {
     const newInvites = await member.guild.invites.fetch();
     for (const invite of newInvites.values()) {
@@ -454,10 +453,9 @@ client.on(Events.InviteCreate, async (invite) => {
 client.once(Events.ClientReady, async (c) => {
   console.log(`✅ Bot logged in as ${c.user.tag}`);
 
-  await c.user.setUsername('DonutSells Manager').catch(console.error);
+  await c.user.setUsername('DonutSells Manager').catch(() => {});
   await c.user.setActivity('DonutSMP Sells', { type: 3 });
 
-  // Cache invites on startup
   for (const guild of c.guilds.cache.values()) {
     try {
       const invites = await guild.invites.fetch();
@@ -562,8 +560,6 @@ client.once(Events.ClientReady, async (c) => {
 // ==================== EVENT: INTERACTION CREATE ====================
 client.on(Events.InteractionCreate, async (interaction) => {
   if (interaction.isStringSelectMenu()) {
-    await interaction.deferUpdate().catch(() => {});
-    
     if (interaction.customId === 'ticket_type') {
       const selected = interaction.values[0];
       await createTicket(interaction, selected);
@@ -577,19 +573,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   if (interaction.isButton()) {
-    await interaction.deferUpdate().catch(() => {});
-
     if (interaction.customId === 'claim_ticket') {
       if (!isStaff(interaction.member)) {
-        return interaction.editReply({ content: 'Only staff can claim tickets!' });
+        return interaction.reply({ content: 'Only staff can claim tickets!', ephemeral: true });
       }
       await interaction.channel.setName(`claimed-${interaction.user.username.toLowerCase()}-${interaction.channel.name.split('-').pop()}`);
-      await interaction.editReply({ content: `Ticket claimed by ${interaction.user}!` });
+      await interaction.reply({ content: `Ticket claimed by ${interaction.user}!` });
     }
 
     if (interaction.customId === 'rename_ticket') {
       if (!isStaff(interaction.member)) {
-        return interaction.editReply({ content: 'Only staff can rename tickets!' });
+        return interaction.reply({ content: 'Only staff can rename tickets!', ephemeral: true });
       }
 
       const modal = new ModalBuilder()
@@ -611,7 +605,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     if (interaction.customId === 'close_ticket') {
       if (!isStaff(interaction.member)) {
-        return interaction.editReply({ content: 'Only staff can close tickets!' });
+        return interaction.reply({ content: 'Only staff can close tickets!', ephemeral: true });
       }
       await closeTicket(interaction);
     }
@@ -620,21 +614,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const giveawayId = interaction.customId.split('_')[2];
       const giveaway = giveaways.get(giveawayId);
       if (!giveaway) {
-        return interaction.editReply({ content: 'This giveaway has ended!' });
+        return interaction.reply({ content: 'This giveaway has ended!', ephemeral: true });
       }
       if (!giveaway.participants) giveaway.participants = [];
       if (giveaway.participants.includes(interaction.user.id)) {
-        return interaction.editReply({ content: 'You are already entered!' });
+        return interaction.reply({ content: 'You are already entered!', ephemeral: true });
       }
       giveaway.participants.push(interaction.user.id);
-      await interaction.editReply({ content: 'You entered the giveaway! Good luck! 🎉' });
+      await interaction.reply({ content: 'You entered the giveaway! Good luck! 🎉', ephemeral: true });
     }
 
     if (interaction.customId.startsWith('claim_giveaway_')) {
       const parts = interaction.customId.split('_');
       const winnerId = parts[parts.length - 1];
       if (interaction.user.id !== winnerId) {
-        return interaction.editReply({ content: 'This claim button is not for you!' });
+        return interaction.reply({ content: 'This claim button is not for you!', ephemeral: true });
       }
       await createTicket(interaction, 'claim');
     }
@@ -661,7 +655,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const inviterId = interaction.customId.replace('invite_reward_claim_', '');
       
       if (interaction.user.id !== inviterId) {
-        return interaction.editReply({ content: 'This claim button is only for the inviter!' });
+        return interaction.reply({ content: 'This claim button is only for the inviter!', ephemeral: true });
       }
       
       await createTicket(interaction, 'invite-boost');
@@ -687,50 +681,50 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     if (interaction.customId.startsWith('staff_app_accept_')) {
       if (!isStaff(interaction.member)) {
-        return interaction.editReply({ content: 'Only staff can manage applications!' });
+        return interaction.reply({ content: 'Only staff can manage applications!', ephemeral: true });
       }
       const appId = interaction.customId.split('_').pop();
       const application = staffApplications.get(appId);
       if (!application) {
-        return interaction.editReply({ content: 'Application not found!' });
+        return interaction.reply({ content: 'Application not found!', ephemeral: true });
       }
       const roleId = application.roleType === 'trial_staff' ? TRIAL_STAFF_ROLE_ID : TRIAL_ADMIN_ROLE_ID;
       const member = interaction.guild.members.cache.get(application.userId);
       if (member) {
         await member.roles.add(roleId).catch(() => {});
       }
-      await interaction.editReply({ content: `Application accepted!` });
+      await interaction.reply({ content: 'Application accepted!', ephemeral: true });
       staffApplications.delete(appId);
     }
 
     if (interaction.customId.startsWith('staff_app_deny_')) {
       if (!isStaff(interaction.member)) {
-        return interaction.editReply({ content: 'Only staff can manage applications!' });
+        return interaction.reply({ content: 'Only staff can manage applications!', ephemeral: true });
       }
       const appId = interaction.customId.split('_').pop();
-      await interaction.editReply({ content: 'Application denied.' });
+      await interaction.reply({ content: 'Application denied.', ephemeral: true });
       staffApplications.delete(appId);
     }
 
     if (interaction.customId.startsWith('staff_app_open_ticket_')) {
       if (!isStaff(interaction.member)) {
-        return interaction.editReply({ content: 'Only staff can open tickets!' });
+        return interaction.reply({ content: 'Only staff can open tickets!', ephemeral: true });
       }
       const appId = interaction.customId.split('_').pop();
       const application = staffApplications.get(appId);
       if (!application) {
-        return interaction.editReply({ content: 'Application not found!' });
+        return interaction.reply({ content: 'Application not found!', ephemeral: true });
       }
 
       const guild = interaction.guild;
       const user = guild.members.cache.get(application.userId);
       if (!user) {
-        return interaction.editReply({ content: 'User not found!' });
+        return interaction.reply({ content: 'User not found!', ephemeral: true });
       }
 
       const category = guild.channels.cache.get(STAFF_APP_TICKET_CATEGORY_ID);
       if (!category) {
-        return interaction.editReply({ content: 'Category not found!' });
+        return interaction.reply({ content: 'Category not found!', ephemeral: true });
       }
 
       const safeUsername = user.user.username.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -753,12 +747,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       await channel.send({ content: `<@${user.id}> Staff wants to talk about your application.` });
-      await interaction.editReply({ content: `Ticket opened: ${channel}` });
+      await interaction.reply({ content: `Ticket opened: ${channel}`, ephemeral: true });
     }
 
     if (interaction.customId.startsWith('appeal_accept_')) {
       if (!isStaff(interaction.member)) {
-        return interaction.editReply({ content: 'Only staff can manage appeals!' });
+        return interaction.reply({ content: 'Only staff can manage appeals!', ephemeral: true });
       }
       const userId = interaction.customId.replace('appeal_accept_', '');
       const member = interaction.guild.members.cache.get(userId);
@@ -771,14 +765,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.guild.members.unban(userId).catch(() => {});
       } catch (error) {}
 
-      await interaction.editReply({ content: `Appeal accepted!` });
+      await interaction.reply({ content: 'Appeal accepted!', ephemeral: true });
     }
 
     if (interaction.customId.startsWith('appeal_deny_')) {
       if (!isStaff(interaction.member)) {
-        return interaction.editReply({ content: 'Only staff can manage appeals!' });
+        return interaction.reply({ content: 'Only staff can manage appeals!', ephemeral: true });
       }
-      await interaction.editReply({ content: 'Appeal denied.' });
+      await interaction.reply({ content: 'Appeal denied.', ephemeral: true });
     }
   }
 
@@ -805,7 +799,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       
       try {
         await interaction.channel.setName(newName);
-        await interaction.reply({ content: `Ticket renamed!`, ephemeral: true });
+        await interaction.reply({ content: 'Ticket renamed!', ephemeral: true });
       } catch (error) {
         await interaction.reply({ content: 'Could not rename ticket.', ephemeral: true });
       }
@@ -856,3 +850,333 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setLabel('Deny')
         .setStyle(ButtonStyle.Danger)
         .setEmoji('❌');
+
+      const openTicketButton = new ButtonBuilder()
+        .setCustomId(`staff_app_open_ticket_${appId}`)
+        .setLabel('Open Ticket With User')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('🎫');
+
+      const row = new ActionRowBuilder().addComponents(acceptButton, denyButton, openTicketButton);
+
+      staffApplications.set(appId, {
+        userId: interaction.user.id,
+        roleType: roleType
+      });
+
+      const staffLogsChannel = interaction.guild.channels.cache.get(STAFF_APPLICATIONS_LOGS_CHANNEL_ID);
+      if (staffLogsChannel) {
+        await staffLogsChannel.send({ embeds: [applicationEmbed], components: [row] });
+        await interaction.reply({ content: 'Your application has been submitted!', ephemeral: true });
+      }
+    }
+
+    if (interaction.customId === 'appeal_modal') {
+      const appealText = interaction.fields.getTextInputValue('appeal_text');
+      
+      const appealEmbed = new EmbedBuilder()
+        .setTitle('📝 New Appeal')
+        .setDescription(appealText)
+        .setColor(0xFFA500)
+        .setAuthor({ name: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() })
+        .setTimestamp();
+
+      const acceptButton = new ButtonBuilder()
+        .setCustomId(`appeal_accept_${interaction.user.id}`)
+        .setLabel('Accept')
+        .setStyle(ButtonStyle.Success)
+        .setEmoji('✅');
+
+      const denyButton = new ButtonBuilder()
+        .setCustomId(`appeal_deny_${interaction.user.id}`)
+        .setLabel('Deny')
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji('❌');
+
+      const row = new ActionRowBuilder().addComponents(acceptButton, denyButton);
+
+      const appealsChannel = interaction.guild.channels.cache.get(APPEALS_LOGS_CHANNEL_ID);
+      if (appealsChannel) {
+        await appealsChannel.send({ embeds: [appealEmbed], components: [row] });
+        await interaction.reply({ content: 'Your appeal has been submitted!', ephemeral: true });
+      }
+    }
+  }
+
+  if (interaction.isCommand()) {
+    const { commandName } = interaction;
+
+    if (commandName === 'ticket') {
+      const embed = new EmbedBuilder()
+        .setTitle('**Create a Ticket**')
+        .setDescription('**Create a Ticket with the button below\nAfter creation, please wait until someone from Staff Team will *Claim* your Ticket. Thank You for understanding.**')
+        .setColor(0x00AE86);
+
+      const select = new StringSelectMenuBuilder()
+        .setCustomId('ticket_type')
+        .setPlaceholder('Choose a ticket type')
+        .addOptions([
+          { label: '💸 Purchase', value: 'purchase' },
+          { label: '🌐 Support', value: 'support' },
+          { label: '📸 Media', value: 'media' },
+          { label: '👥 Partnership', value: 'partnership' },
+          { label: '💎 Sponsor', value: 'sponsor' },
+          { label: '🎁 Invite/Boost Reward Claim', value: 'invite-boost' }
+        ]);
+
+      const row = new ActionRowBuilder().addComponents(select);
+      await interaction.channel.send({ embeds: [embed], components: [row] });
+      await interaction.reply({ content: 'Ticket panel created!', ephemeral: true });
+    }
+
+    if (commandName === 'suggest') {
+      const suggestEmbed = new EmbedBuilder()
+        .setTitle('**Suggestions**')
+        .setDescription('**If you have any suggestion what should we add into our server/bot, please use the *button* below**')
+        .setColor(0x9B59B6);
+
+      const suggestButton = new ButtonBuilder()
+        .setCustomId('open_suggestion_modal')
+        .setLabel('Suggest')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('💡');
+
+      const row = new ActionRowBuilder().addComponents(suggestButton);
+      await interaction.channel.send({ embeds: [suggestEmbed], components: [row] });
+      await interaction.reply({ content: 'Suggestion panel created!', ephemeral: true });
+    }
+
+    if (commandName === 'staffapp') {
+      const staffAppEmbed = new EmbedBuilder()
+        .setTitle('**Staff Applications**')
+        .setDescription('**Please choose what role you want to apply to from the menu below.\nStaff Team will review it and respond within 48 Hours.**')
+        .setColor(0x3498DB);
+
+      const select = new StringSelectMenuBuilder()
+        .setCustomId('staff_application_type')
+        .setPlaceholder('Choose a role to apply for')
+        .addOptions([
+          { label: 'Trial Staff', value: 'trial_staff' },
+          { label: 'Trial Admin', value: 'trial_admin' }
+        ]);
+
+      const row = new ActionRowBuilder().addComponents(select);
+      await interaction.channel.send({ embeds: [staffAppEmbed], components: [row] });
+      await interaction.reply({ content: 'Staff application panel created!', ephemeral: true });
+    }
+
+    if (commandName === 'gcreate') {
+      const name = interaction.options.getString('name');
+      const duration = interaction.options.getInteger('duration');
+      const prize = interaction.options.getString('prize');
+      const description = interaction.options.getString('description') || 'No description';
+      const winnersCount = interaction.options.getInteger('winners') || 1;
+
+      const endTime = Date.now() + duration * 60000;
+      const giveawayId = Date.now().toString();
+
+      const embed = new EmbedBuilder()
+        .setTitle(`🎉 ${name}`)
+        .setDescription(`**Prize:** ${prize}\n**Description:** ${description}\n**Ends:** <t:${Math.floor(endTime / 1000)}:R>\n**Winners:** ${winnersCount}\n\nClick the button below to enter!`)
+        .setColor(0xFFD700)
+        .setFooter({ text: 'Good luck!' });
+
+      const enterButton = new ButtonBuilder()
+        .setCustomId(`enter_giveaway_${giveawayId}`)
+        .setLabel('Enter Giveaway')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('🎉');
+
+      const row = new ActionRowBuilder().addComponents(enterButton);
+
+      const giveawayChannel = interaction.guild.channels.cache.get(GIVEAWAY_CHANNEL_ID);
+      if (!giveawayChannel) {
+        return interaction.reply({ content: 'Giveaway channel not found!', ephemeral: true });
+      }
+
+      const msg = await giveawayChannel.send({ embeds: [embed], components: [row] });
+
+      giveaways.set(giveawayId, {
+        channelId: giveawayChannel.id,
+        messageId: msg.id,
+        prize,
+        winnersCount,
+        participants: []
+      });
+
+      setTimeout(() => endGiveaway(giveawayId), duration * 60000);
+      await interaction.reply({ content: 'Giveaway created!', ephemeral: true });
+    }
+
+    if (commandName === 'embed') {
+      const channel = interaction.options.getChannel('channel');
+      const title = interaction.options.getString('title');
+      const description = interaction.options.getString('description');
+      const colorHex = interaction.options.getString('color') || '#5865F2';
+      const color = parseInt(colorHex.replace('#', ''), 16);
+
+      const embed = new EmbedBuilder()
+        .setTitle(title)
+        .setDescription(description)
+        .setColor(color);
+
+      try {
+        const webhooks = await channel.fetchWebhooks();
+        let webhook = webhooks.find(wh => wh.name === 'DonutSells Manager');
+        if (!webhook) {
+          webhook = await channel.createWebhook({
+            name: 'DonutSells Manager',
+            avatar: client.user.displayAvatarURL()
+          });
+        }
+        const webhookClient = new WebhookClient({ id: webhook.id, token: webhook.token });
+        await webhookClient.send({ embeds: [embed] });
+        await interaction.reply({ content: 'Embed sent!', ephemeral: true });
+      } catch (error) {
+        await interaction.reply({ content: 'Could not send embed.', ephemeral: true });
+      }
+    }
+
+    if (commandName === 'dm') {
+      const user = interaction.options.getUser('user');
+      const message = interaction.options.getString('message');
+      
+      const dmEmbed = new EmbedBuilder()
+        .setTitle('DonutSMP Sells')
+        .setDescription(message)
+        .setColor(0x00AE86)
+        .setFooter({ text: 'DonutSells Manager' })
+        .setTimestamp();
+      
+      const serverButton = new ButtonBuilder()
+        .setLabel('Sent from DonutSMP Sells')
+        .setStyle(ButtonStyle.Link)
+        .setURL(SERVER_INVITE);
+      
+      const row = new ActionRowBuilder().addComponents(serverButton);
+      
+      try {
+        await user.send({ embeds: [dmEmbed], components: [row] });
+        await interaction.reply({ content: `DM sent to ${user.tag}!`, ephemeral: true });
+      } catch (error) {
+        await interaction.reply({ content: 'Could not send DM.', ephemeral: true });
+      }
+    }
+
+    if (commandName === 'ban') {
+      const user = interaction.options.getUser('user');
+      const reason = interaction.options.getString('reason') || 'No reason provided';
+      
+      const member = interaction.guild.members.cache.get(user.id);
+      if (!member) {
+        return interaction.reply({ content: 'User not found!', ephemeral: true });
+      }
+
+      try {
+        const banEmbed = new EmbedBuilder()
+          .setTitle('🔨 You have been banned!')
+          .setDescription(`You've been banned.\nReason: ${reason}`)
+          .setColor(0xFF0000)
+          .setTimestamp();
+
+        const appealButton = new ButtonBuilder()
+          .setCustomId('appeal_button')
+          .setLabel('Appeal')
+          .setStyle(ButtonStyle.Primary)
+          .setEmoji('📝');
+
+        const row = new ActionRowBuilder().addComponents(appealButton);
+        await user.send({ embeds: [banEmbed], components: [row] });
+      } catch (error) {}
+
+      await member.ban({ reason }).catch(() => {});
+      await interaction.reply({ content: `Banned ${user.tag}!`, ephemeral: true });
+    }
+
+    if (commandName === 'kick') {
+      const user = interaction.options.getUser('user');
+      const reason = interaction.options.getString('reason') || 'No reason provided';
+      
+      const member = interaction.guild.members.cache.get(user.id);
+      if (!member) {
+        return interaction.reply({ content: 'User not found!', ephemeral: true });
+      }
+
+      try {
+        const kickEmbed = new EmbedBuilder()
+          .setTitle('👢 You have been kicked!')
+          .setDescription(`You've been kicked.\nReason: ${reason}`)
+          .setColor(0xFFA500)
+          .setTimestamp();
+
+        const appealButton = new ButtonBuilder()
+          .setCustomId('appeal_button')
+          .setLabel('Appeal')
+          .setStyle(ButtonStyle.Primary)
+          .setEmoji('📝');
+
+        const row = new ActionRowBuilder().addComponents(appealButton);
+        await user.send({ embeds: [kickEmbed], components: [row] });
+      } catch (error) {}
+
+      await member.kick(reason).catch(() => {});
+      await interaction.reply({ content: `Kicked ${user.tag}!`, ephemeral: true });
+    }
+
+    if (commandName === 'timeout') {
+      const user = interaction.options.getUser('user');
+      const minutes = interaction.options.getInteger('minutes');
+      const reason = interaction.options.getString('reason') || 'No reason provided';
+      
+      const member = interaction.guild.members.cache.get(user.id);
+      if (!member) {
+        return interaction.reply({ content: 'User not found!', ephemeral: true });
+      }
+
+      try {
+        const timeoutEmbed = new EmbedBuilder()
+          .setTitle('🔇 You have been timed out!')
+          .setDescription(`You've been timed out for ${minutes} minutes.\nReason: ${reason}`)
+          .setColor(0xFFFF00)
+          .setTimestamp();
+
+        const appealButton = new ButtonBuilder()
+          .setCustomId('appeal_button')
+          .setLabel('Appeal')
+          .setStyle(ButtonStyle.Primary)
+          .setEmoji('📝');
+
+        const row = new ActionRowBuilder().addComponents(appealButton);
+        await user.send({ embeds: [timeoutEmbed], components: [row] });
+      } catch (error) {}
+
+      await member.timeout(minutes * 60000, reason).catch(() => {});
+      await interaction.reply({ content: `Timed out ${user.tag} for ${minutes} minutes!`, ephemeral: true });
+    }
+
+    if (commandName === 'untimeout') {
+      const user = interaction.options.getUser('user');
+      const member = interaction.guild.members.cache.get(user.id);
+      if (!member) {
+        return interaction.reply({ content: 'User not found!', ephemeral: true });
+      }
+
+      await member.timeout(null).catch(() => {});
+      await interaction.reply({ content: `Removed timeout from ${user.tag}!`, ephemeral: true });
+    }
+
+    if (commandName === 'unban') {
+      const userId = interaction.options.getString('userid');
+      
+      try {
+        await interaction.guild.members.unban(userId);
+        await interaction.reply({ content: 'Unbanned!', ephemeral: true });
+      } catch (error) {
+        await interaction.reply({ content: 'Could not unban.', ephemeral: true });
+      }
+    }
+  }
+});
+
+// ==================== LOGIN ====================
+client.login(process.env.DISCORD_TOKEN);
