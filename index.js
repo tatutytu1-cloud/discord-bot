@@ -57,6 +57,54 @@ const APPEALS_LOGS_CHANNEL_ID = '1539969669811933204';
 const SERVER_INVITE = 'https://discord.gg/pingpongshangout';
 const BOT_NAME = "PingPong's Hangout Manager";
 
+// Sightengine API
+const SIGHTENGINE_API_USER = '136018423';
+const SIGHTENGINE_API_SECRET = 'JobAdkm7oXGYw3pz8DE2Hyz5UbCY2XxF';
+
+// ==================== BAD WORDS FILTER ====================
+const BAD_WORDS = [
+  'fuck', 'shit', 'bitch', 'asshole', 'cunt', 'nigger', 'faggot',
+  'retard', 'dick', 'pussy', 'whore', 'slut', 'bastard', 'damn',
+  'motherfucker', 'cock', 'twat', 'wanker', 'prick', 'ass',
+  'douche', 'dumbass', 'jackass', 'arse', 'bugger', 'bollocks',
+  'wank', 'tosser', 'bellend', 'knob', 'crap', 'piss', 'hell',
+  'idiot', 'moron', 'stupid', 'fool', 'loser', 'sucker', 'coward'
+];
+
+function containsBadWord(text) {
+  const lower = text.toLowerCase();
+  return BAD_WORDS.some(word => lower.includes(word));
+}
+
+// ==================== SIGHTENGINE AI FILTER ====================
+async function checkToxicityWithSightengine(text) {
+  try {
+    const response = await fetch('https://api.sightengine.com/1.0/text/check.json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text,
+        mode: 'standard',
+        lang: 'en',
+        api_user: SIGHTENGINE_API_USER,
+        api_secret: SIGHTENGINE_API_SECRET
+      })
+    });
+
+    const data = await response.json();
+    
+    const profanityMatches = data?.profanity?.matches?.length || 0;
+    const insultMatches = data?.insult?.matches?.length || 0;
+    const toxicityMatches = data?.toxicity?.matches?.length || 0;
+    
+    return profanityMatches + insultMatches + toxicityMatches > 0;
+  } catch (error) {
+    console.error('Sightengine error:', error);
+    return null;
+  }
+}
+
+// ==================== TICKET TYPES ====================
 const TICKET_TYPES = {
   'purchase': 'purchase',
   'support': 'support',
@@ -360,13 +408,45 @@ client.on(Events.InviteCreate, async (invite) => {
   });
 });
 
-// ==================== MESSAGE CREATE - AUTO CLAIM ====================
+// ==================== MESSAGE CREATE - AI FILTER + AUTO CLAIM ====================
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot) return;
   if (!message.guild) return;
   
+  // Sightengine AI filter
+  const isToxic = await checkToxicityWithSightengine(message.content);
+  if (isToxic === true) {
+    await message.delete().catch(() => {});
+    
+    const warnEmbed = new EmbedBuilder()
+      .setTitle('⚠️ Message Removed')
+      .setDescription('Your message was flagged by AI as inappropriate.')
+      .setColor(0xFF0000)
+      .setFooter({ text: BOT_NAME })
+      .setTimestamp();
+    
+    await message.author.send({ embeds: [warnEmbed] }).catch(() => {});
+    return;
+  }
+  
+  // Fallback: Bad words filter
+  if (containsBadWord(message.content)) {
+    await message.delete().catch(() => {});
+    
+    const warnEmbed = new EmbedBuilder()
+      .setTitle('⚠️ Message Removed')
+      .setDescription('Your message was removed for containing inappropriate language.')
+      .setColor(0xFF0000)
+      .setFooter({ text: BOT_NAME })
+      .setTimestamp();
+    
+    await message.author.send({ embeds: [warnEmbed] }).catch(() => {});
+    return;
+  }
+
   const channel = message.channel;
   
+  // Auto-claim (only for tickets)
   if (channel.parentId !== TICKET_CATEGORY_ID) return;
   if (!channel.name.startsWith('ticket-') && !channel.name.startsWith('claimed-')) return;
   
