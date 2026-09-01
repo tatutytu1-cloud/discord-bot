@@ -154,9 +154,9 @@ const giveaways = new Map();
 const inviteCache = new Map();
 const claimedTickets = new Map();
 const ticketCreatedAt = new Map();
-const savedInviteRewards = new Map(); // Map<userId, count>
-const savedBoostRewards = new Map();  // Map<userId, count>
-const initialBoostMap = new Map();    // Map<userId, boolean> pro detekci nových boostů
+const savedInviteRewards = new Map();
+const savedBoostRewards = new Map();
+const initialBoostMap = new Map();
 
 function isStaff(member) {
   return STAFF_ROLE_IDS.some(roleId => member.roles.cache.has(roleId));
@@ -425,7 +425,6 @@ client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
   const oldBoosting = Boolean(oldMember.premiumSince);
   const newBoosting = Boolean(newMember.premiumSince);
 
-  // If the member just started boosting (premiumSince changed from null to date)
   if (!oldBoosting && newBoosting) {
     const current = savedBoostRewards.get(newMember.id) || 0;
     savedBoostRewards.set(newMember.id, current + 1);
@@ -502,7 +501,7 @@ client.once(Events.ClientReady, async (c) => {
   await c.user.setUsername(BOT_NAME).catch(() => {});
   await c.user.setActivity("PingPong's Hangout", { type: 3 });
 
-  // Initialize boost tracking (current boosters)
+  // Initialize boost tracking
   for (const guild of c.guilds.cache.values()) {
     try {
       const members = await guild.members.fetch();
@@ -517,7 +516,7 @@ client.once(Events.ClientReady, async (c) => {
     }
   }
 
-  // Cache invites on startup
+  // Cache invites
   for (const guild of c.guilds.cache.values()) {
     try {
       const invites = await guild.invites.fetch();
@@ -533,18 +532,89 @@ client.once(Events.ClientReady, async (c) => {
     }
   }
 
-  // Create cashout panel
+  // ==================== COOL PANELS ====================
+
+  // Ticket Panel
+  try {
+    const ticketPanelChannel = c.channels.cache.get(TICKET_PANEL_CHANNEL_ID);
+    if (ticketPanelChannel) {
+      const embed = new EmbedBuilder()
+        .setTitle('🎫 **CREATE A TICKET** 🎫')
+        .setDescription(
+          '**Need help? Select a category below and our Staff Team will assist you!**\n\n' +
+          '✨ **How it works:**\n' +
+          '1️⃣ Choose the type of support you need from the dropdown menu\n' +
+          '2️⃣ A private ticket channel will be created for you\n' +
+          '3️⃣ Our Staff Team will claim and assist you shortly\n\n' +
+          '⏳ *Please wait patiently after creating your ticket.*'
+        )
+        .setColor(0x00AE86)
+        .setFooter({ text: BOT_NAME, iconURL: c.user.displayAvatarURL() })
+        .setTimestamp();
+
+      const select = new StringSelectMenuBuilder()
+        .setCustomId('ticket_type')
+        .setPlaceholder('🔍 Choose a ticket type...')
+        .addOptions([
+          { label: '💸 Purchase', value: 'purchase' },
+          { label: '🌐 Support', value: 'support' },
+          { label: '📸 Media', value: 'media' },
+          { label: '👥 Partnership', value: 'partnership' },
+          { label: '💎 Sponsor', value: 'sponsor' },
+          { label: '🎁 Invite/Boost Reward Claim', value: 'invite-boost' }
+        ]);
+
+      const row = new ActionRowBuilder().addComponents(select);
+      await ticketPanelChannel.send({ embeds: [embed], components: [row] });
+      console.log('✅ Cool Ticket panel created');
+    }
+  } catch (error) {
+    console.error('Error creating ticket panel:', error);
+  }
+
+  // Suggestion Panel
+  try {
+    const suggestionPanelChannel = c.channels.cache.get(SUGGESTION_PANEL_CHANNEL_ID);
+    if (suggestionPanelChannel) {
+      const embed = new EmbedBuilder()
+        .setTitle('💡 **SUGGESTIONS** 💡')
+        .setDescription(
+          '**Got an idea to improve our server or bot? We\'d love to hear it!**\n\n' +
+          '✨ **How to submit:**\n' +
+          '1️⃣ Click the button below\n' +
+          '2️⃣ Write your suggestion in the form\n' +
+          '3️⃣ Submit it for our Staff Team to review\n\n' +
+          '🌟 *Your feedback helps us grow!*'
+        )
+        .setColor(0x9B59B6)
+        .setFooter({ text: BOT_NAME, iconURL: c.user.displayAvatarURL() })
+        .setTimestamp();
+
+      const suggestButton = new ButtonBuilder()
+        .setCustomId('open_suggestion_modal')
+        .setLabel('Suggest')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('💡');
+
+      const row = new ActionRowBuilder().addComponents(suggestButton);
+      await suggestionPanelChannel.send({ embeds: [embed], components: [row] });
+      console.log('✅ Cool Suggestion panel created');
+    }
+  } catch (error) {
+    console.error('Error creating suggestion panel:', error);
+  }
+
+  // Cashout Panel (already cool, slightly updated)
   try {
     const cashoutChannel = c.channels.cache.get(CASHOUT_PANEL_CHANNEL_ID);
     if (cashoutChannel) {
-      // Vylepšený embed
       const cashoutEmbed = new EmbedBuilder()
         .setTitle('💰 **REWARD CASHOUT** 💰')
         .setDescription(
           '✨ **Click the button below to claim your saved Invites/Boost rewards!** ✨\n\n' +
           '**Available actions:**\n' +
-          '🔄 **CASH OUT** – Otevře formulář pro výběr typu odměny\n' +
-          '📊 **CHECK BALANCE** – Zobrazí tvůj aktuální počet naspořených invitů a boostů\n\n' +
+          '🔄 **CASH OUT** – Otevře výběr typu odměny (Boost/Invite)\n' +
+          '📊 **CHECK BALANCE** – Zobrazí počet naspořených invitů a boostů\n\n' +
           '🎉 *Good luck and thank you for supporting our community!* 🎉'
         )
         .setColor(0x9B59B6)
@@ -565,7 +635,7 @@ client.once(Events.ClientReady, async (c) => {
 
       const row = new ActionRowBuilder().addComponents(cashoutButton, checkBalanceButton);
       await cashoutChannel.send({ embeds: [cashoutEmbed], components: [row] });
-      console.log('✅ Cashout panel created');
+      console.log('✅ Cool Cashout panel created');
     }
   } catch (error) {
     console.error('Error creating cashout panel:', error);
@@ -799,7 +869,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     if (interaction.customId === 'cashout_button') {
-      // Zobrazit výběr typu odměny
       const boostButton = new ButtonBuilder()
         .setCustomId('cashout_select_boost')
         .setLabel('BOOST')
@@ -815,7 +884,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const row = new ActionRowBuilder().addComponents(boostButton, inviteButton);
 
       await interaction.reply({
-        content: 'Vyber si, jakou odměnu chceš vybrat:',
+        content: 'Select which reward you want to cash out:',
         components: [row],
         ephemeral: true
       });
@@ -824,18 +893,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.customId === 'cashout_select_boost') {
       const savedBoosts = savedBoostRewards.get(interaction.user.id) || 0;
       if (savedBoosts === 0) {
-        return interaction.reply({ content: 'Nemáš žádné naspořené boosty!', ephemeral: true });
+        return interaction.reply({ content: 'You have no saved boosts!', ephemeral: true });
       }
-      const extraMessage = `🚀 **BOOST CASHOUT**\n<@${interaction.user.id}> má ${savedBoosts} naspořených boostů k vyplacení!`;
+      const extraMessage = `🚀 **BOOST CASHOUT**\n<@${interaction.user.id}> has ${savedBoosts} saved boost(s) to claim!`;
       await createTicket(interaction, 'invite-boost', extraMessage);
     }
 
     if (interaction.customId === 'cashout_select_invite') {
       const savedInvites = savedInviteRewards.get(interaction.user.id) || 0;
       if (savedInvites === 0) {
-        return interaction.reply({ content: 'Nemáš žádné naspořené invity!', ephemeral: true });
+        return interaction.reply({ content: 'You have no saved invites!', ephemeral: true });
       }
-      const extraMessage = `💌 **INVITE CASHOUT**\n<@${interaction.user.id}> má ${savedInvites} naspořených invitů k vyplacení!`;
+      const extraMessage = `💌 **INVITE CASHOUT**\n<@${interaction.user.id}> has ${savedInvites} saved invite(s) to claim!`;
       await createTicket(interaction, 'invite-boost', extraMessage);
     }
 
@@ -844,11 +913,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const savedBoosts = savedBoostRewards.get(interaction.user.id) || 0;
       
       const balanceEmbed = new EmbedBuilder()
-        .setTitle('📊 **Tvoje naspořené odměny**')
+        .setTitle('📊 **Your Balance**')
         .setDescription(
-          `💌 **Invity:** ${savedInvites}\n` +
-          `🚀 **Boosty:** ${savedBoosts}\n\n` +
-          `Celkem: ${savedInvites + savedBoosts} odměn!`
+          `💌 **Invites:** ${savedInvites}\n` +
+          `🚀 **Boosts:** ${savedBoosts}\n\n` +
+          `✨ **Total:** ${savedInvites + savedBoosts} reward(s)!`
         )
         .setColor(0x9B59B6)
         .setFooter({ text: BOT_NAME })
@@ -967,13 +1036,22 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     if (commandName === 'ticket') {
       const embed = new EmbedBuilder()
-        .setTitle('**Create a Ticket**')
-        .setDescription('**Create a Ticket with the button below\nAfter creation, please wait until someone from Staff Team will *Claim* your Ticket. Thank You for understanding.**')
-        .setColor(0x00AE86);
+        .setTitle('🎫 **CREATE A TICKET** 🎫')
+        .setDescription(
+          '**Need help? Select a category below and our Staff Team will assist you!**\n\n' +
+          '✨ **How it works:**\n' +
+          '1️⃣ Choose the type of support you need from the dropdown menu\n' +
+          '2️⃣ A private ticket channel will be created for you\n' +
+          '3️⃣ Our Staff Team will claim and assist you shortly\n\n' +
+          '⏳ *Please wait patiently after creating your ticket.*'
+        )
+        .setColor(0x00AE86)
+        .setFooter({ text: BOT_NAME })
+        .setTimestamp();
 
       const select = new StringSelectMenuBuilder()
         .setCustomId('ticket_type')
-        .setPlaceholder('Choose a ticket type')
+        .setPlaceholder('🔍 Choose a ticket type...')
         .addOptions([
           { label: '💸 Purchase', value: 'purchase' },
           { label: '🌐 Support', value: 'support' },
@@ -989,10 +1067,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     if (commandName === 'suggest') {
-      const suggestEmbed = new EmbedBuilder()
-        .setTitle('**Suggestions**')
-        .setDescription('**If you have any suggestion what should we add into our server/bot, please use the *button* below**')
-        .setColor(0x9B59B6);
+      const embed = new EmbedBuilder()
+        .setTitle('💡 **SUGGESTIONS** 💡')
+        .setDescription(
+          '**Got an idea to improve our server or bot? We\'d love to hear it!**\n\n' +
+          '✨ **How to submit:**\n' +
+          '1️⃣ Click the button below\n' +
+          '2️⃣ Write your suggestion in the form\n' +
+          '3️⃣ Submit it for our Staff Team to review\n\n' +
+          '🌟 *Your feedback helps us grow!*'
+        )
+        .setColor(0x9B59B6)
+        .setFooter({ text: BOT_NAME })
+        .setTimestamp();
 
       const suggestButton = new ButtonBuilder()
         .setCustomId('open_suggestion_modal')
@@ -1001,7 +1088,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setEmoji('💡');
 
       const row = new ActionRowBuilder().addComponents(suggestButton);
-      await interaction.channel.send({ embeds: [suggestEmbed], components: [row] });
+      await interaction.channel.send({ embeds: [embed], components: [row] });
       await interaction.reply({ content: 'Suggestion panel created!', ephemeral: true });
     }
 
