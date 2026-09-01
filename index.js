@@ -53,6 +53,7 @@ const SUGGESTIONS_LOGS_CHANNEL_ID = '1539969669811933204';
 const WELCOME_GOODBYE_CHANNEL_ID = '1540717176913399829';
 const INVITE_TRACKING_CHANNEL_ID = '1539999179609481366';
 const APPEALS_LOGS_CHANNEL_ID = '1539969669811933204';
+const CASHOUT_PANEL_CHANNEL_ID = '1544425577577058444';
 
 const SERVER_INVITE = 'https://discord.gg/pingpongshangout';
 const BOT_NAME = "PingPong's Hangout Manager";
@@ -153,6 +154,7 @@ const giveaways = new Map();
 const inviteCache = new Map();
 const claimedTickets = new Map();
 const ticketCreatedAt = new Map();
+const savedInviteRewards = new Map(); // Map<userId, count>
 
 function isStaff(member) {
   return STAFF_ROLE_IDS.some(roleId => member.roles.cache.has(roleId));
@@ -173,7 +175,7 @@ async function getTicketCategory(guild) {
 }
 
 // ==================== TICKET FUNCTIONS ====================
-async function createTicket(interaction, ticketType) {
+async function createTicket(interaction, ticketType, extraMessage) {
   const guild = interaction.guild;
   const user = interaction.user;
   const category = await getTicketCategory(guild);
@@ -232,9 +234,11 @@ async function createTicket(interaction, ticketType) {
   const emoji = TICKET_EMOJIS[ticketType] || '🎫';
   const label = TICKET_LABELS[ticketType] || ticketType;
 
+  const description = extraMessage || 'Hello! Our Staff Team is currently reviewing your Ticket and will respond soon! After 12 hours of no response, please Ping someone from our Staff Team! Thank You!';
+
   const welcomeEmbed = new EmbedBuilder()
     .setTitle(`${emoji} ${label} Ticket`)
-    .setDescription('Hello! Our Staff Team is currently reviewing your Ticket and will respond soon! After 12 hours of no response, please Ping someone from our Staff Team! Thank You!')
+    .setDescription(description)
     .setColor(0x00AE86)
     .setFooter({ text: BOT_NAME });
 
@@ -358,7 +362,13 @@ client.on(Events.GuildMemberAdd, async (member) => {
               .setStyle(ButtonStyle.Success)
               .setEmoji('✅');
 
-            const row = new ActionRowBuilder().addComponents(claimButton);
+            const saveButton = new ButtonBuilder()
+              .setCustomId(`invite_reward_save_${inviter.id}`)
+              .setLabel('SAVE IT')
+              .setStyle(ButtonStyle.Secondary)
+              .setEmoji('💾');
+
+            const row = new ActionRowBuilder().addComponents(claimButton, saveButton);
             await trackingChannel.send({ embeds: [inviteEmbed], components: [row] });
           }
         }
@@ -490,6 +500,30 @@ client.once(Events.ClientReady, async (c) => {
     } catch (error) {
       console.error(`Error caching invites for ${guild.name}:`, error);
     }
+  }
+
+  // Create cashout panel
+  try {
+    const cashoutChannel = c.channels.cache.get(CASHOUT_PANEL_CHANNEL_ID);
+    if (cashoutChannel) {
+      const cashoutEmbed = new EmbedBuilder()
+        .setTitle('💰 Cash Out')
+        .setDescription('Click the button below to cash out your saved invite rewards!')
+        .setColor(0xFFD700)
+        .setFooter({ text: BOT_NAME });
+
+      const cashoutButton = new ButtonBuilder()
+        .setCustomId('cashout_button')
+        .setLabel('CASH OUT')
+        .setStyle(ButtonStyle.Success)
+        .setEmoji('💰');
+
+      const row = new ActionRowBuilder().addComponents(cashoutButton);
+      await cashoutChannel.send({ embeds: [cashoutEmbed], components: [row] });
+      console.log('✅ Cashout panel created');
+    }
+  } catch (error) {
+    console.error('Error creating cashout panel:', error);
   }
 
   const commands = [
@@ -704,6 +738,30 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
       
       await createTicket(interaction, 'invite-boost');
+    }
+
+    if (interaction.customId.startsWith('invite_reward_save_')) {
+      const inviterId = interaction.customId.replace('invite_reward_save_', '');
+      
+      if (interaction.user.id !== inviterId) {
+        return interaction.reply({ content: 'This button is only for the inviter!', ephemeral: true });
+      }
+      
+      const currentCount = savedInviteRewards.get(interaction.user.id) || 0;
+      savedInviteRewards.set(interaction.user.id, currentCount + 1);
+      
+      await interaction.reply({ content: `You saved your invite reward! You now have ${currentCount + 1} saved reward(s).`, ephemeral: true });
+    }
+
+    if (interaction.customId === 'cashout_button') {
+      const savedCount = savedInviteRewards.get(interaction.user.id) || 0;
+      
+      if (savedCount === 0) {
+        return interaction.reply({ content: 'You have no saved invite rewards!', ephemeral: true });
+      }
+      
+      const extraMessage = `💰 **CASH OUT**\n<@${interaction.user.id}> has ${savedCount} saved invite reward(s) to claim!`;
+      await createTicket(interaction, 'invite-boost', extraMessage);
     }
 
     if (interaction.customId === 'appeal_button') {
@@ -959,11 +1017,22 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return interaction.reply({ content: 'Please provide a number between 1 and 100.', ephemeral: true });
       }
       
+      await interaction.deferReply({ ephemeral: true });
+      
       try {
-        await interaction.channel.bulkDelete(count, true);
-        await interaction.reply({ content: `Deleted ${count} messages!`, ephemeral: true });
+        const messages = await interaction.channel.messages.fetch({ limit: count });
+        const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
+        const deletableMessages = messages.filter(msg => msg.createdTimestamp > twoWeeksAgo);
+        
+        if (deletableMessages.size === 0) {
+          return interaction.editReply({ content: 'No messages found that are younger than 14 days.' });
+        }
+        
+        const deleted = await interaction.channel.bulkDelete(deletableMessages, true);
+        await interaction.editReply({ content: `Deleted ${deleted.size} messages!` });
       } catch (error) {
-        await interaction.reply({ content: 'Could not delete messages. Make sure they are not older than 14 days.', ephemeral: true });
+        console.error('Clear error:', error);
+        await interaction.editReply({ content: 'Could not delete messages.' });
       }
     }
 
