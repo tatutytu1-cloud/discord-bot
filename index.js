@@ -155,6 +155,8 @@ const inviteCache = new Map();
 const claimedTickets = new Map();
 const ticketCreatedAt = new Map();
 const savedInviteRewards = new Map(); // Map<userId, count>
+const savedBoostRewards = new Map();  // Map<userId, count>
+const initialBoostMap = new Map();    // Map<userId, boolean> pro detekci nových boostů
 
 function isStaff(member) {
   return STAFF_ROLE_IDS.some(roleId => member.roles.cache.has(roleId));
@@ -418,6 +420,19 @@ client.on(Events.InviteCreate, async (invite) => {
   });
 });
 
+// ==================== BOOST TRACKING ====================
+client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
+  const oldBoosting = Boolean(oldMember.premiumSince);
+  const newBoosting = Boolean(newMember.premiumSince);
+
+  // If the member just started boosting (premiumSince changed from null to date)
+  if (!oldBoosting && newBoosting) {
+    const current = savedBoostRewards.get(newMember.id) || 0;
+    savedBoostRewards.set(newMember.id, current + 1);
+    console.log(`✅ ${newMember.user.tag} started boosting! Total boosts saved: ${current + 1}`);
+  }
+});
+
 // ==================== MESSAGE CREATE - AI FILTER + AUTO CLAIM ====================
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot) return;
@@ -487,6 +502,22 @@ client.once(Events.ClientReady, async (c) => {
   await c.user.setUsername(BOT_NAME).catch(() => {});
   await c.user.setActivity("PingPong's Hangout", { type: 3 });
 
+  // Initialize boost tracking (current boosters)
+  for (const guild of c.guilds.cache.values()) {
+    try {
+      const members = await guild.members.fetch();
+      for (const member of members.values()) {
+        if (member.premiumSince) {
+          initialBoostMap.set(member.id, true);
+        }
+      }
+      console.log(`✅ Initialized boost tracking for ${guild.name}: ${initialBoostMap.size} boosters`);
+    } catch (error) {
+      console.error(`Error initializing boost tracking for ${guild.name}:`, error);
+    }
+  }
+
+  // Cache invites on startup
   for (const guild of c.guilds.cache.values()) {
     try {
       const invites = await guild.invites.fetch();
@@ -506,11 +537,19 @@ client.once(Events.ClientReady, async (c) => {
   try {
     const cashoutChannel = c.channels.cache.get(CASHOUT_PANEL_CHANNEL_ID);
     if (cashoutChannel) {
+      // Vylepšený embed
       const cashoutEmbed = new EmbedBuilder()
-        .setTitle('💰 Cash Out')
-        .setDescription('Click the button below to cash out your saved invite rewards!')
-        .setColor(0xFFD700)
-        .setFooter({ text: BOT_NAME });
+        .setTitle('💰 **REWARD CASHOUT** 💰')
+        .setDescription(
+          '✨ **Click the button below to claim your saved Invites/Boost rewards!** ✨\n\n' +
+          '**Available actions:**\n' +
+          '🔄 **CASH OUT** – Otevře formulář pro výběr typu odměny\n' +
+          '📊 **CHECK BALANCE** – Zobrazí tvůj aktuální počet naspořených invitů a boostů\n\n' +
+          '🎉 *Good luck and thank you for supporting our community!* 🎉'
+        )
+        .setColor(0x9B59B6)
+        .setFooter({ text: BOT_NAME, iconURL: c.user.displayAvatarURL() })
+        .setTimestamp();
 
       const cashoutButton = new ButtonBuilder()
         .setCustomId('cashout_button')
@@ -518,7 +557,13 @@ client.once(Events.ClientReady, async (c) => {
         .setStyle(ButtonStyle.Success)
         .setEmoji('💰');
 
-      const row = new ActionRowBuilder().addComponents(cashoutButton);
+      const checkBalanceButton = new ButtonBuilder()
+        .setCustomId('check_balance_button')
+        .setLabel('CHECK BALANCE')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('📊');
+
+      const row = new ActionRowBuilder().addComponents(cashoutButton, checkBalanceButton);
       await cashoutChannel.send({ embeds: [cashoutEmbed], components: [row] });
       console.log('✅ Cashout panel created');
     }
@@ -754,14 +799,62 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     if (interaction.customId === 'cashout_button') {
-      const savedCount = savedInviteRewards.get(interaction.user.id) || 0;
-      
-      if (savedCount === 0) {
-        return interaction.reply({ content: 'You have no saved invite rewards!', ephemeral: true });
+      // Zobrazit výběr typu odměny
+      const boostButton = new ButtonBuilder()
+        .setCustomId('cashout_select_boost')
+        .setLabel('BOOST')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('🚀');
+
+      const inviteButton = new ButtonBuilder()
+        .setCustomId('cashout_select_invite')
+        .setLabel('INVITE')
+        .setStyle(ButtonStyle.Success)
+        .setEmoji('💌');
+
+      const row = new ActionRowBuilder().addComponents(boostButton, inviteButton);
+
+      await interaction.reply({
+        content: 'Vyber si, jakou odměnu chceš vybrat:',
+        components: [row],
+        ephemeral: true
+      });
+    }
+
+    if (interaction.customId === 'cashout_select_boost') {
+      const savedBoosts = savedBoostRewards.get(interaction.user.id) || 0;
+      if (savedBoosts === 0) {
+        return interaction.reply({ content: 'Nemáš žádné naspořené boosty!', ephemeral: true });
       }
-      
-      const extraMessage = `💰 **CASH OUT**\n<@${interaction.user.id}> has ${savedCount} saved invite reward(s) to claim!`;
+      const extraMessage = `🚀 **BOOST CASHOUT**\n<@${interaction.user.id}> má ${savedBoosts} naspořených boostů k vyplacení!`;
       await createTicket(interaction, 'invite-boost', extraMessage);
+    }
+
+    if (interaction.customId === 'cashout_select_invite') {
+      const savedInvites = savedInviteRewards.get(interaction.user.id) || 0;
+      if (savedInvites === 0) {
+        return interaction.reply({ content: 'Nemáš žádné naspořené invity!', ephemeral: true });
+      }
+      const extraMessage = `💌 **INVITE CASHOUT**\n<@${interaction.user.id}> má ${savedInvites} naspořených invitů k vyplacení!`;
+      await createTicket(interaction, 'invite-boost', extraMessage);
+    }
+
+    if (interaction.customId === 'check_balance_button') {
+      const savedInvites = savedInviteRewards.get(interaction.user.id) || 0;
+      const savedBoosts = savedBoostRewards.get(interaction.user.id) || 0;
+      
+      const balanceEmbed = new EmbedBuilder()
+        .setTitle('📊 **Tvoje naspořené odměny**')
+        .setDescription(
+          `💌 **Invity:** ${savedInvites}\n` +
+          `🚀 **Boosty:** ${savedBoosts}\n\n` +
+          `Celkem: ${savedInvites + savedBoosts} odměn!`
+        )
+        .setColor(0x9B59B6)
+        .setFooter({ text: BOT_NAME })
+        .setTimestamp();
+      
+      await interaction.reply({ embeds: [balanceEmbed], ephemeral: true });
     }
 
     if (interaction.customId === 'appeal_button') {
