@@ -530,6 +530,12 @@ client.once(Events.ClientReady, async (c) => {
       .addStringOption(opt => opt.setName('message').setDescription('Message content').setRequired(true)),
 
     new SlashCommandBuilder()
+      .setName('clear')
+      .setDescription('Delete a number of messages')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addIntegerOption(opt => opt.setName('count').setDescription('Number of messages to delete').setRequired(true)),
+
+    new SlashCommandBuilder()
       .setName('ban')
       .setDescription('Ban a user')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
@@ -943,6 +949,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.reply({ content: `DM sent to ${user.tag}!`, ephemeral: true });
       } catch (error) {
         await interaction.reply({ content: 'Could not send DM.', ephemeral: true });
+      }
+    }
+
+    if (commandName === 'clear') {
+      const count = interaction.options.getInteger('count');
+      
+      if (count < 1 || count > 100) {
+        return interaction.reply({ content: 'Please provide a number between 1 and 100.', ephemeral: true });
+      }
+      
+      try {
+        await interaction.channel.bulkDelete(count, true);
+        await interaction.reply({ content: `Deleted ${count} messages!`, ephemeral: true });
+      } catch (error) {
+        await interaction.reply({ content: 'Could not delete messages. Make sure they are not older than 14 days.', ephemeral: true });
       }
     }
 
