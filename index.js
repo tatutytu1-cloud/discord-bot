@@ -103,8 +103,8 @@ const client = new Client({
 
 const giveaways = new Map();
 const inviteCache = new Map();
-const claimedTickets = new Map(); // Map<channelId, claimedByUserId>
-const ticketCreatedAt = new Map(); // Map<channelId, timestamp>
+const claimedTickets = new Map();
+const ticketCreatedAt = new Map();
 
 function isStaff(member) {
   return STAFF_ROLE_IDS.some(roleId => member.roles.cache.has(roleId));
@@ -158,7 +158,6 @@ async function createTicket(interaction, ticketType) {
     permissionOverwrites: permissionOverwrites
   });
 
-  // Save ticket creation time
   ticketCreatedAt.set(channel.id, Date.now());
 
   const claimButton = new ButtonBuilder()
@@ -193,7 +192,6 @@ async function createTicket(interaction, ticketType) {
 
   await channel.send({ content: `${pingRoles}`, embeds: [welcomeEmbed], components: [row] });
 
-  // Schedule 12h ping if no staff responds
   setTimeout(async () => {
     const claimed = claimedTickets.get(channel.id);
     if (!claimed) {
@@ -203,7 +201,7 @@ async function createTicket(interaction, ticketType) {
         await channelStillExists.send({ content: `${pingMessage} Reminder: This ticket has not been claimed yet!` });
       }
     }
-  }, 12 * 60 * 60 * 1000); // 12 hours
+  }, 12 * 60 * 60 * 1000);
 
   await interaction.reply({ content: `Ticket created: ${channel}`, ephemeral: true });
 }
@@ -369,27 +367,20 @@ client.on(Events.MessageCreate, async (message) => {
   
   const channel = message.channel;
   
-  // Check if this is a ticket channel (name starts with ticket- or contains -)
   if (!channel.name.startsWith('ticket-') && !channel.name.startsWith('claimed-') && !channel.name.includes('-')) return;
   
-  // Check if it's a ticket channel (has parent category with our TICKET_CATEGORY_ID)
   if (channel.parentId !== TICKET_CATEGORY_ID) return;
   
-  // Check if already claimed
   if (claimedTickets.has(channel.id)) return;
   
-  // Check if message author is staff
   if (!isStaff(message.member)) return;
   
-  // Auto-claim
   claimedTickets.set(channel.id, message.author.id);
   
-  // Rename channel to claimed-username-original
   const originalName = channel.name;
   const safeStaffName = message.author.username.toLowerCase().replace(/[^a-z0-9]/g, '');
   await channel.setName(`claimed-${safeStaffName}-${originalName.replace(/^(ticket-|claimed-)/, '')}`).catch(() => {});
   
-  // Send claim message
   const claimEmbed = new EmbedBuilder()
     .setTitle('✅ Ticket Claimed')
     .setDescription(`This ticket has been claimed by <@${message.author.id}>`)
@@ -519,7 +510,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return interaction.reply({ content: 'Only staff can claim tickets!', ephemeral: true });
       }
       
-      // Check if already claimed
       if (claimedTickets.has(interaction.channel.id)) {
         const claimedBy = claimedTickets.get(interaction.channel.id);
         return interaction.reply({ content: `This ticket is already claimed by <@${claimedBy}>!`, ephemeral: true });
@@ -571,6 +561,24 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return interaction.reply({ content: 'You are already entered!', ephemeral: true });
       }
       giveaway.participants.push(interaction.user.id);
+      
+      const updatedButton = new ButtonBuilder()
+        .setCustomId(`enter_giveaway_${giveawayId}`)
+        .setLabel(`Enter Giveaway (${giveaway.participants.length})`)
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('🎉');
+      
+      const updatedRow = new ActionRowBuilder().addComponents(updatedButton);
+      
+      try {
+        const giveawayMessage = interaction.message;
+        if (giveawayMessage) {
+          await giveawayMessage.edit({ components: [updatedRow] });
+        }
+      } catch (error) {
+        console.error('Could not update button:', error);
+      }
+      
       await interaction.reply({ content: 'You entered the giveaway! Good luck! 🎉', ephemeral: true });
     }
 
@@ -777,7 +785,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const enterButton = new ButtonBuilder()
         .setCustomId(`enter_giveaway_${giveawayId}`)
-        .setLabel('Enter Giveaway')
+        .setLabel('Enter Giveaway (0)')
         .setStyle(ButtonStyle.Primary)
         .setEmoji('🎉');
 
