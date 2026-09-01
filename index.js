@@ -367,17 +367,13 @@ client.on(Events.MessageCreate, async (message) => {
   
   const channel = message.channel;
   
-  // Check if it's a ticket channel
   if (channel.parentId !== TICKET_CATEGORY_ID) return;
   if (!channel.name.startsWith('ticket-') && !channel.name.startsWith('claimed-')) return;
   
-  // Check if already claimed
   if (claimedTickets.has(channel.id)) return;
   
-  // Check if message author is staff
   if (!isStaff(message.member)) return;
   
-  // Auto-claim
   claimedTickets.set(channel.id, message.author.id);
   
   const originalName = channel.name.replace(/^(ticket-|claimed-)/, '');
@@ -784,7 +780,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const embed = new EmbedBuilder()
         .setTitle(`🎉 ${name}`)
-        .setDescription(`**Prize:** ${prize}\n**Description:** ${description}\n**Ends:** <t:${Math.floor(endTime / 1000)}:R>\n**Winners:** ${winnersCount}\n\nClick the button below to enter!`)
+        .setDescription(`**Hosted by:** <@${interaction.user.id}>\n**Prize:** ${prize}\n**Description:** ${description}\n**Ends:** <t:${Math.floor(endTime / 1000)}:R>\n**Winners:** ${winnersCount}\n\nClick the button below to enter!`)
         .setColor(0xFFD700)
         .setFooter({ text: 'Good luck!' });
 
