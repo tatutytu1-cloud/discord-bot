@@ -50,17 +50,11 @@ const GIVEAWAY_CHANNEL_ID = '1539694123353772183';
 const TICKET_PANEL_CHANNEL_ID = '1539692765716283403';
 const SUGGESTION_PANEL_CHANNEL_ID = '1539949080493694986';
 const SUGGESTIONS_LOGS_CHANNEL_ID = '1539969669811933204';
-const STAFF_APPLICATIONS_PANEL_CHANNEL_ID = '1540766710167248916';
-const STAFF_APPLICATIONS_LOGS_CHANNEL_ID = '1539969669811933204';
 const WELCOME_GOODBYE_CHANNEL_ID = '1540717176913399829';
 const INVITE_TRACKING_CHANNEL_ID = '1539999179609481366';
 const APPEALS_LOGS_CHANNEL_ID = '1539969669811933204';
 
-const TRIAL_STAFF_ROLE_ID = '1543370588725186672';
-const TRIAL_ADMIN_ROLE_ID = '1543369605333131274';
-
 const SERVER_INVITE = 'https://discord.gg/pingpongshangout';
-
 const BOT_NAME = "PingPong's Hangout Manager";
 
 const TICKET_TYPES = {
@@ -108,8 +102,9 @@ const client = new Client({
 });
 
 const giveaways = new Map();
-const staffApplications = new Map();
 const inviteCache = new Map();
+const claimedTickets = new Map(); // Map<channelId, claimedByUserId>
+const ticketCreatedAt = new Map(); // Map<channelId, timestamp>
 
 function isStaff(member) {
   return STAFF_ROLE_IDS.some(roleId => member.roles.cache.has(roleId));
@@ -163,6 +158,9 @@ async function createTicket(interaction, ticketType) {
     permissionOverwrites: permissionOverwrites
   });
 
+  // Save ticket creation time
+  ticketCreatedAt.set(channel.id, Date.now());
+
   const claimButton = new ButtonBuilder()
     .setCustomId('claim_ticket')
     .setLabel('Claim')
@@ -195,6 +193,18 @@ async function createTicket(interaction, ticketType) {
 
   await channel.send({ content: `${pingRoles}`, embeds: [welcomeEmbed], components: [row] });
 
+  // Schedule 12h ping if no staff responds
+  setTimeout(async () => {
+    const claimed = claimedTickets.get(channel.id);
+    if (!claimed) {
+      const channelStillExists = guild.channels.cache.get(channel.id);
+      if (channelStillExists) {
+        const pingMessage = PING_ROLE_IDS.map(id => `<@&${id}>`).join(' ');
+        await channelStillExists.send({ content: `${pingMessage} Reminder: This ticket has not been claimed yet!` });
+      }
+    }
+  }, 12 * 60 * 60 * 1000); // 12 hours
+
   await interaction.reply({ content: `Ticket created: ${channel}`, ephemeral: true });
 }
 
@@ -215,112 +225,13 @@ async function closeTicket(interaction) {
     await logsChannel.send({ embeds: [transcriptEmbed] });
   }
 
+  claimedTickets.delete(channel.id);
+  ticketCreatedAt.delete(channel.id);
+
   await interaction.reply({ content: 'Closing ticket...', ephemeral: true });
   setTimeout(async () => {
     await channel.delete().catch(() => {});
   }, 5000);
-}
-
-// ==================== STAFF APPLICATION FUNCTIONS ====================
-async function openStaffApplicationModal(interaction, roleType) {
-  const modal = new ModalBuilder()
-    .setCustomId(`staff_app_modal_${roleType}`)
-    .setTitle('Staff Application');
-
-  const ageInput = new TextInputBuilder()
-    .setCustomId('age')
-    .setLabel('1. How old are you?')
-    .setStyle(TextInputStyle.Short)
-    .setPlaceholder('e.g. 16')
-    .setMaxLength(3)
-    .setRequired(true);
-
-  const experienceInput = new TextInputBuilder()
-    .setCustomId('experience')
-    .setLabel('2. How long using Discord & Minecraft?')
-    .setStyle(TextInputStyle.Short)
-    .setPlaceholder('e.g. 3 years')
-    .setMaxLength(100)
-    .setRequired(true);
-
-  const previousExpInput = new TextInputBuilder()
-    .setCustomId('previous_experience')
-    .setLabel('3. Previous Community Management?')
-    .setStyle(TextInputStyle.Paragraph)
-    .setPlaceholder('Describe your experience...')
-    .setMaxLength(1000)
-    .setRequired(true);
-
-  const aboutInput = new TextInputBuilder()
-    .setCustomId('about')
-    .setLabel('4. Tell us about yourself')
-    .setStyle(TextInputStyle.Paragraph)
-    .setPlaceholder('Tell us as much as you can...')
-    .setMaxLength(1000)
-    .setRequired(true);
-
-  const activityInput = new TextInputBuilder()
-    .setCustomId('activity')
-    .setLabel('5. How active per day?')
-    .setStyle(TextInputStyle.Short)
-    .setPlaceholder('e.g. 4-6 hours')
-    .setMaxLength(100)
-    .setRequired(true);
-
-  const whyInput = new TextInputBuilder()
-    .setCustomId('why')
-    .setLabel('6. Why should we hire you?')
-    .setStyle(TextInputStyle.Paragraph)
-    .setPlaceholder('Your answer...')
-    .setMaxLength(1000)
-    .setRequired(true);
-
-  const plusMinusInput = new TextInputBuilder()
-    .setCustomId('plus_minus')
-    .setLabel('7. Pluses & minuses?')
-    .setStyle(TextInputStyle.Paragraph)
-    .setPlaceholder('List them...')
-    .setMaxLength(1000)
-    .setRequired(true);
-
-  const inactivityInput = new TextInputBuilder()
-    .setCustomId('inactivity')
-    .setLabel('8. Agree to inactivity term? (Yes/No)')
-    .setStyle(TextInputStyle.Short)
-    .setPlaceholder('Yes or No')
-    .setMaxLength(3)
-    .setRequired(true);
-
-  const behaviorInput = new TextInputBuilder()
-    .setCustomId('behavior')
-    .setLabel('9. Agree to behavior terms? (Yes/No)')
-    .setStyle(TextInputStyle.Short)
-    .setPlaceholder('Yes or No')
-    .setMaxLength(3)
-    .setRequired(true);
-
-  const professionalInput = new TextInputBuilder()
-    .setCustomId('professional')
-    .setLabel('10. Promise to be professional? (Yes/No)')
-    .setStyle(TextInputStyle.Short)
-    .setPlaceholder('Yes or No')
-    .setMaxLength(3)
-    .setRequired(true);
-
-  modal.addComponents(
-    new ActionRowBuilder().addComponents(ageInput),
-    new ActionRowBuilder().addComponents(experienceInput),
-    new ActionRowBuilder().addComponents(previousExpInput),
-    new ActionRowBuilder().addComponents(aboutInput),
-    new ActionRowBuilder().addComponents(activityInput),
-    new ActionRowBuilder().addComponents(whyInput),
-    new ActionRowBuilder().addComponents(plusMinusInput),
-    new ActionRowBuilder().addComponents(inactivityInput),
-    new ActionRowBuilder().addComponents(behaviorInput),
-    new ActionRowBuilder().addComponents(professionalInput)
-  );
-
-  await interaction.showModal(modal);
 }
 
 // ==================== GIVEAWAY FUNCTIONS ====================
@@ -451,6 +362,44 @@ client.on(Events.InviteCreate, async (invite) => {
   });
 });
 
+// ==================== MESSAGE CREATE - AUTO CLAIM ====================
+client.on(Events.MessageCreate, async (message) => {
+  if (message.author.bot) return;
+  if (!message.guild) return;
+  
+  const channel = message.channel;
+  
+  // Check if this is a ticket channel (name starts with ticket- or contains -)
+  if (!channel.name.startsWith('ticket-') && !channel.name.startsWith('claimed-') && !channel.name.includes('-')) return;
+  
+  // Check if it's a ticket channel (has parent category with our TICKET_CATEGORY_ID)
+  if (channel.parentId !== TICKET_CATEGORY_ID) return;
+  
+  // Check if already claimed
+  if (claimedTickets.has(channel.id)) return;
+  
+  // Check if message author is staff
+  if (!isStaff(message.member)) return;
+  
+  // Auto-claim
+  claimedTickets.set(channel.id, message.author.id);
+  
+  // Rename channel to claimed-username-original
+  const originalName = channel.name;
+  const safeStaffName = message.author.username.toLowerCase().replace(/[^a-z0-9]/g, '');
+  await channel.setName(`claimed-${safeStaffName}-${originalName.replace(/^(ticket-|claimed-)/, '')}`).catch(() => {});
+  
+  // Send claim message
+  const claimEmbed = new EmbedBuilder()
+    .setTitle('✅ Ticket Claimed')
+    .setDescription(`This ticket has been claimed by <@${message.author.id}>`)
+    .setColor(0x00FF00)
+    .setFooter({ text: BOT_NAME })
+    .setTimestamp();
+  
+  await channel.send({ embeds: [claimEmbed] });
+});
+
 // ==================== EVENT: CLIENT READY ====================
 client.once(Events.ClientReady, async (c) => {
   console.log(`✅ Bot logged in as ${c.user.tag}`);
@@ -482,11 +431,6 @@ client.once(Events.ClientReady, async (c) => {
     new SlashCommandBuilder()
       .setName('suggest')
       .setDescription('Create a suggestion panel')
-      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
-    new SlashCommandBuilder()
-      .setName('staffapp')
-      .setDescription('Create a staff application panel')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     new SlashCommandBuilder()
@@ -567,12 +511,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await createTicket(interaction, selected);
       return;
     }
-
-    if (interaction.customId === 'staff_application_type') {
-      const selected = interaction.values[0];
-      await openStaffApplicationModal(interaction, selected);
-      return;
-    }
   }
 
   if (interaction.isButton()) {
@@ -580,7 +518,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (!isStaff(interaction.member)) {
         return interaction.reply({ content: 'Only staff can claim tickets!', ephemeral: true });
       }
-      await interaction.channel.setName(`claimed-${interaction.user.username.toLowerCase()}-${interaction.channel.name.split('-').pop()}`);
+      
+      // Check if already claimed
+      if (claimedTickets.has(interaction.channel.id)) {
+        const claimedBy = claimedTickets.get(interaction.channel.id);
+        return interaction.reply({ content: `This ticket is already claimed by <@${claimedBy}>!`, ephemeral: true });
+      }
+      
+      claimedTickets.set(interaction.channel.id, interaction.user.id);
+      
+      await interaction.channel.setName(`claimed-${interaction.user.username.toLowerCase()}-${interaction.channel.name.split('-').pop()}`).catch(() => {});
       await interaction.reply({ content: `Ticket claimed by ${interaction.user}!` });
     }
 
@@ -682,77 +629,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.showModal(modal);
     }
 
-    if (interaction.customId.startsWith('staff_app_accept_')) {
-      if (!isStaff(interaction.member)) {
-        return interaction.reply({ content: 'Only staff can manage applications!', ephemeral: true });
-      }
-      const appId = interaction.customId.split('_').pop();
-      const application = staffApplications.get(appId);
-      if (!application) {
-        return interaction.reply({ content: 'Application not found!', ephemeral: true });
-      }
-      const roleId = application.roleType === 'trial_staff' ? TRIAL_STAFF_ROLE_ID : TRIAL_ADMIN_ROLE_ID;
-      const member = interaction.guild.members.cache.get(application.userId);
-      if (member) {
-        await member.roles.add(roleId).catch(() => {});
-      }
-      await interaction.reply({ content: 'Application accepted!', ephemeral: true });
-      staffApplications.delete(appId);
-    }
-
-    if (interaction.customId.startsWith('staff_app_deny_')) {
-      if (!isStaff(interaction.member)) {
-        return interaction.reply({ content: 'Only staff can manage applications!', ephemeral: true });
-      }
-      const appId = interaction.customId.split('_').pop();
-      await interaction.reply({ content: 'Application denied.', ephemeral: true });
-      staffApplications.delete(appId);
-    }
-
-    if (interaction.customId.startsWith('staff_app_open_ticket_')) {
-      if (!isStaff(interaction.member)) {
-        return interaction.reply({ content: 'Only staff can open tickets!', ephemeral: true });
-      }
-      const appId = interaction.customId.split('_').pop();
-      const application = staffApplications.get(appId);
-      if (!application) {
-        return interaction.reply({ content: 'Application not found!', ephemeral: true });
-      }
-
-      const guild = interaction.guild;
-      const user = guild.members.cache.get(application.userId);
-      if (!user) {
-        return interaction.reply({ content: 'User not found!', ephemeral: true });
-      }
-
-      const category = guild.channels.cache.get(STAFF_APP_TICKET_CATEGORY_ID);
-      if (!category) {
-        return interaction.reply({ content: 'Category not found!', ephemeral: true });
-      }
-
-      const safeUsername = user.user.username.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const channel = await guild.channels.create({
-        name: `staff-app-${safeUsername}`,
-        type: ChannelType.GuildText,
-        parent: category.id,
-        permissionOverwrites: [
-          { id: guild.roles.everyone, deny: [PermissionFlagsBits.ViewChannel] },
-          { id: user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
-        ]
-      });
-
-      for (const roleId of STAFF_ROLE_IDS) {
-        await channel.permissionOverwrites.create(roleId, {
-          ViewChannel: true,
-          SendMessages: true,
-          ManageChannels: true
-        }).catch(() => {});
-      }
-
-      await channel.send({ content: `<@${user.id}> Staff wants to talk about your application.` });
-      await interaction.reply({ content: `Ticket opened: ${channel}`, ephemeral: true });
-    }
-
     if (interaction.customId.startsWith('appeal_accept_')) {
       if (!isStaff(interaction.member)) {
         return interaction.reply({ content: 'Only staff can manage appeals!', ephemeral: true });
@@ -805,72 +681,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.reply({ content: 'Ticket renamed!', ephemeral: true });
       } catch (error) {
         await interaction.reply({ content: 'Could not rename ticket.', ephemeral: true });
-      }
-    }
-
-    if (interaction.customId.startsWith('staff_app_modal_')) {
-      const roleType = interaction.customId.replace('staff_app_modal_', '');
-      const age = interaction.fields.getTextInputValue('age');
-      const experience = interaction.fields.getTextInputValue('experience');
-      const previousExperience = interaction.fields.getTextInputValue('previous_experience');
-      const about = interaction.fields.getTextInputValue('about');
-      const activity = interaction.fields.getTextInputValue('activity');
-      const why = interaction.fields.getTextInputValue('why');
-      const plusMinus = interaction.fields.getTextInputValue('plus_minus');
-      const inactivity = interaction.fields.getTextInputValue('inactivity');
-      const behavior = interaction.fields.getTextInputValue('behavior');
-      const professional = interaction.fields.getTextInputValue('professional');
-
-      const roleLabel = roleType === 'trial_staff' ? 'Trial Staff' : 'Trial Admin';
-      const appId = Date.now().toString();
-
-      const applicationEmbed = new EmbedBuilder()
-        .setTitle(`📝 Staff Application: ${roleLabel}`)
-        .setAuthor({ name: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() })
-        .setColor(0x3498DB)
-        .addFields(
-          { name: '1. How old are you?', value: age },
-          { name: '2. How long using Discord & Minecraft?', value: experience },
-          { name: '3. Previous Community Management?', value: previousExperience },
-          { name: '4. Tell us about yourself', value: about },
-          { name: '5. How active per day?', value: activity },
-          { name: '6. Why should we hire you?', value: why },
-          { name: '7. Pluses & minuses', value: plusMinus },
-          { name: '8. Agree to inactivity term?', value: inactivity },
-          { name: '9. Agree to behavior terms?', value: behavior },
-          { name: '10. Promise to be professional?', value: professional }
-        )
-        .setTimestamp();
-
-      const acceptButton = new ButtonBuilder()
-        .setCustomId(`staff_app_accept_${appId}`)
-        .setLabel('Accept')
-        .setStyle(ButtonStyle.Success)
-        .setEmoji('✅');
-
-      const denyButton = new ButtonBuilder()
-        .setCustomId(`staff_app_deny_${appId}`)
-        .setLabel('Deny')
-        .setStyle(ButtonStyle.Danger)
-        .setEmoji('❌');
-
-      const openTicketButton = new ButtonBuilder()
-        .setCustomId(`staff_app_open_ticket_${appId}`)
-        .setLabel('Open Ticket With User')
-        .setStyle(ButtonStyle.Primary)
-        .setEmoji('🎫');
-
-      const row = new ActionRowBuilder().addComponents(acceptButton, denyButton, openTicketButton);
-
-      staffApplications.set(appId, {
-        userId: interaction.user.id,
-        roleType: roleType
-      });
-
-      const staffLogsChannel = interaction.guild.channels.cache.get(STAFF_APPLICATIONS_LOGS_CHANNEL_ID);
-      if (staffLogsChannel) {
-        await staffLogsChannel.send({ embeds: [applicationEmbed], components: [row] });
-        await interaction.reply({ content: 'Your application has been submitted!', ephemeral: true });
       }
     }
 
@@ -947,25 +757,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const row = new ActionRowBuilder().addComponents(suggestButton);
       await interaction.channel.send({ embeds: [suggestEmbed], components: [row] });
       await interaction.reply({ content: 'Suggestion panel created!', ephemeral: true });
-    }
-
-    if (commandName === 'staffapp') {
-      const staffAppEmbed = new EmbedBuilder()
-        .setTitle('**Staff Applications**')
-        .setDescription('**Please choose what role you want to apply to from the menu below.\nStaff Team will review it and respond within 48 Hours.**')
-        .setColor(0x3498DB);
-
-      const select = new StringSelectMenuBuilder()
-        .setCustomId('staff_application_type')
-        .setPlaceholder('Choose a role to apply for')
-        .addOptions([
-          { label: 'Trial Staff', value: 'trial_staff' },
-          { label: 'Trial Admin', value: 'trial_admin' }
-        ]);
-
-      const row = new ActionRowBuilder().addComponents(select);
-      await interaction.channel.send({ embeds: [staffAppEmbed], components: [row] });
-      await interaction.reply({ content: 'Staff application panel created!', ephemeral: true });
     }
 
     if (commandName === 'gcreate') {
