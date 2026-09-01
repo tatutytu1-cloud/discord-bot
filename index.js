@@ -559,20 +559,19 @@ client.once(Events.ClientReady, async (c) => {
 
 // ==================== EVENT: INTERACTION CREATE ====================
 client.on(Events.InteractionCreate, async (interaction) => {
-  // STRING SELECT MENU - use deferUpdate for more time
+  // STRING SELECT MENU
   if (interaction.isStringSelectMenu()) {
-    await interaction.deferUpdate().catch(() => {});
-    
     if (interaction.customId === 'ticket_type') {
       const selected = interaction.values[0];
       await createTicket(interaction, selected);
+      return;
     }
 
     if (interaction.customId === 'staff_application_type') {
       const selected = interaction.values[0];
       await openStaffApplicationModal(interaction, selected);
+      return;
     }
-    return;
   }
 
   // BUTTONS
