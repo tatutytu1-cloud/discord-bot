@@ -604,7 +604,7 @@ client.once(Events.ClientReady, async (c) => {
     console.error('Error creating suggestion panel:', error);
   }
 
-  // Cashout Panel (already cool, slightly updated)
+  // Cashout Panel
   try {
     const cashoutChannel = c.channels.cache.get(CASHOUT_PANEL_CHANNEL_ID);
     if (cashoutChannel) {
@@ -613,8 +613,8 @@ client.once(Events.ClientReady, async (c) => {
         .setDescription(
           '✨ **Click the button below to claim your saved Invites/Boost rewards!** ✨\n\n' +
           '**Available actions:**\n' +
-          '🔄 **CASH OUT** – Otevře výběr typu odměny (Boost/Invite)\n' +
-          '📊 **CHECK BALANCE** – Zobrazí počet naspořených invitů a boostů\n\n' +
+          '🔄 **CASH OUT** – Opens a selection of reward type (Boost/Invite)\n' +
+          '📊 **CHECK BALANCE** – Shows your current amount of saved invites and boosts\n\n' +
           '🎉 *Good luck and thank you for supporting our community!* 🎉'
         )
         .setColor(0x9B59B6)
