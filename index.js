@@ -388,7 +388,7 @@ async function endGiveaway(giveawayId) {
   const giveaway = giveaways.get(giveawayId);
   if (!giveaway) return;
 
-  const { channelId, prize, winnersCount } = giveaway;
+  const { channelId, prize, winnersCount, messageId, hosterId } = giveaway;
   const channel = client.channels.cache.get(channelId);
   if (!channel) return;
 
@@ -418,11 +418,81 @@ async function endGiveaway(giveawayId) {
       .setStyle(ButtonStyle.Success)
       .setEmoji('🎉');
 
-    const row = new ActionRowBuilder().addComponents(claimButton);
+    const rerollButton = new ButtonBuilder()
+      .setCustomId(`reroll_giveaway_${giveawayId}`)
+      .setLabel('REROLL')
+      .setStyle(ButtonStyle.Danger)
+      .setEmoji('🔄');
+
+    const row = new ActionRowBuilder().addComponents(claimButton, rerollButton);
     await channel.send({ embeds: [winnerEmbed], components: [row] });
   }
 
-  giveaways.delete(giveawayId);
+  // Save winners to giveaway for reroll
+  giveaway.winners = winners;
+  giveaways.set(giveawayId, giveaway);
+}
+
+async function rerollGiveaway(giveawayId, interaction) {
+  const giveaway = giveaways.get(giveawayId);
+  if (!giveaway) {
+    return interaction.reply({ content: 'Giveaway not found!', ephemeral: true });
+  }
+
+  // Check if user is staff or hoster
+  if (!isStaff(interaction.member) && interaction.user.id !== giveaway.hosterId) {
+    return interaction.reply({ content: 'Only staff or the giveaway hoster can reroll!', ephemeral: true });
+  }
+
+  const { channelId, prize, winnersCount, messageId, participants } = giveaway;
+  const channel = client.channels.cache.get(channelId);
+  if (!channel) return;
+
+  if (!participants || participants.length === 0) {
+    return interaction.reply({ content: 'No participants to reroll!', ephemeral: true });
+  }
+
+  // Remove previous winners from pool
+  const previousWinners = giveaway.winners || [];
+  const pool = participants.filter(id => !previousWinners.includes(id));
+  
+  if (pool.length === 0) {
+    return interaction.reply({ content: 'No eligible participants for reroll!', ephemeral: true });
+  }
+
+  const winners = [];
+  for (let i = 0; i < Math.min(winnersCount, pool.length); i++) {
+    const randomIndex = Math.floor(Math.random() * pool.length);
+    winners.push(pool.splice(randomIndex, 1)[0]);
+  }
+
+  for (const winnerId of winners) {
+    const winnerEmbed = new EmbedBuilder()
+      .setTitle('🎉 Giveaway Winner (Reroll)!')
+      .setDescription(`<@${winnerId}> You've won the Giveaway! Prize: **${prize}**`)
+      .setColor(0xFFD700);
+
+    const claimButton = new ButtonBuilder()
+      .setCustomId(`claim_giveaway_${giveawayId}_${winnerId}`)
+      .setLabel('CLAIM')
+      .setStyle(ButtonStyle.Success)
+      .setEmoji('🎉');
+
+    const rerollButton = new ButtonBuilder()
+      .setCustomId(`reroll_giveaway_${giveawayId}`)
+      .setLabel('REROLL')
+      .setStyle(ButtonStyle.Danger)
+      .setEmoji('🔄');
+
+    const row = new ActionRowBuilder().addComponents(claimButton, rerollButton);
+    await channel.send({ embeds: [winnerEmbed], components: [row] });
+  }
+
+  // Update winners
+  giveaway.winners = [...(giveaway.winners || []), ...winners];
+  giveaways.set(giveawayId, giveaway);
+
+  await interaction.reply({ content: 'Giveaway rerolled!', ephemeral: true });
 }
 
 // ==================== WELCOME/FAREWELL/BAN/KICK ====================
@@ -840,6 +910,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await createTicket(interaction, 'claim');
     }
 
+    if (interaction.customId.startsWith('reroll_giveaway_')) {
+      const giveawayId = interaction.customId.replace('reroll_giveaway_', '');
+      await rerollGiveaway(giveawayId, interaction);
+    }
+
     if (interaction.customId === 'open_suggestion_modal') {
       const modal = new ModalBuilder().setCustomId('suggestion_modal').setTitle('Submit a Suggestion');
       const suggestionInput = new TextInputBuilder().setCustomId('suggestion_text').setLabel('Your Suggestion').setStyle(TextInputStyle.Paragraph).setPlaceholder('Write your suggestion here...').setMaxLength(1000).setRequired(true);
@@ -1039,7 +1114,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const giveawayChannel = interaction.guild.channels.cache.get(GIVEAWAY_CHANNEL_ID);
       if (!giveawayChannel) return interaction.reply({ content: 'Giveaway channel not found!', ephemeral: true });
       const msg = await giveawayChannel.send({ embeds: [embed], components: [row] });
-      giveaways.set(giveawayId, { channelId: giveawayChannel.id, messageId: msg.id, prize, winnersCount, participants: [] });
+      giveaways.set(giveawayId, { channelId: giveawayChannel.id, messageId: msg.id, prize, winnersCount, participants: [], hosterId: interaction.user.id });
       setTimeout(() => endGiveaway(giveawayId), duration * 60000);
       await interaction.reply({ content: 'Giveaway created!', ephemeral: true });
     }
