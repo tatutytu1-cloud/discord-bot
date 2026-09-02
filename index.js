@@ -162,9 +162,9 @@ const giveaways = new Map();
 const inviteCache = new Map();
 const claimedTickets = new Map();
 const ticketCreatedAt = new Map();
-const userBalances = new Map(); // Map<userId, money in M>
-const savedInvites = new Map(); // Map<userId, count>
-const savedBoosts = new Map(); // Map<userId, count>
+const userBalances = new Map();
+const savedInvites = new Map();
+const savedBoosts = new Map();
 
 function isStaff(member) {
   return STAFF_ROLE_IDS.some(roleId => member.roles.cache.has(roleId));
@@ -350,7 +350,6 @@ client.on(Events.GuildMemberAdd, async (member) => {
     await channel.send({ embeds: [welcomeEmbed] });
   }
 
-  // Invite tracking
   try {
     const newInvites = await member.guild.invites.fetch();
     for (const invite of newInvites.values()) {
@@ -439,9 +438,13 @@ client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
   const newBoosting = Boolean(newMember.premiumSince);
 
   if (!oldBoosting && newBoosting) {
-    const current = savedBoosts.get(newMember.id) || 0;
-    savedBoosts.set(newMember.id, current + 1);
-    console.log(`✅ ${newMember.user.tag} started boosting! Total boosts saved: ${current + 1}`);
+    const currentBoosts = savedBoosts.get(newMember.id) || 0;
+    savedBoosts.set(newMember.id, currentBoosts + 1);
+    
+    const currentBalance = userBalances.get(newMember.id) || 0;
+    userBalances.set(newMember.id, currentBalance + BOOST_REWARD_MONEY);
+    
+    console.log(`✅ ${newMember.user.tag} started boosting! Boosts: ${currentBoosts + 1}, Balance: ${currentBalance + BOOST_REWARD_MONEY}M`);
   }
 });
 
@@ -511,7 +514,6 @@ client.once(Events.ClientReady, async (c) => {
   await c.user.setUsername(BOT_NAME).catch(() => {});
   await c.user.setActivity("PingPong's Hangout", { type: 3 });
 
-  // Cache invites
   for (const guild of c.guilds.cache.values()) {
     try {
       const invites = await guild.invites.fetch();
@@ -579,7 +581,7 @@ client.once(Events.ClientReady, async (c) => {
   try {
     const cashoutChannel = c.channels.cache.get(CASHOUT_PANEL_CHANNEL_ID);
     if (cashoutChannel) {
-      const cashoutEmbed = new EmbedBuilder().setTitle('💰 **REWARD CASHOUT** 💰').setDescription('✨ **Click the button below to check your balance or cash out!** ✨\n\n**Available actions:**\n🔄 **CASH OUT** – Opens a ticket with your total balance\n📊 **CHECK BALANCE** – Shows your saved invites, boosts and balance\n\n🎉 *Good luck and thank you for supporting our community!* 🎉').setColor(0x9B59B6).setFooter({ text: BOT_NAME }).setTimestamp();
+      const cashoutEmbed = new EmbedBuilder().setTitle('💰 **REWARD CASHOUT** 💰').setDescription('✨ **Click the button below to check your balance or cash out!** ✨\n\n**Available actions:**\n🔄 **CASH OUT** – Choose amount and open a ticket\n📊 **CHECK BALANCE** – Shows your saved invites, boosts and balance\n\n🎉 *Good luck and thank you for supporting our community!* 🎉').setColor(0x9B59B6).setFooter({ text: BOT_NAME }).setTimestamp();
       const cashoutButton = new ButtonBuilder().setCustomId('cashout_button').setLabel('CASH OUT').setStyle(ButtonStyle.Success).setEmoji('💰');
       const checkBalanceButton = new ButtonBuilder().setCustomId('check_balance_button').setLabel('CHECK BALANCE').setStyle(ButtonStyle.Primary).setEmoji('📊');
       const row = new ActionRowBuilder().addComponents(cashoutButton, checkBalanceButton);
@@ -706,7 +708,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (interaction.user.id !== inviterId) return interaction.reply({ content: 'This claim button is only for the inviter!', ephemeral: true });
       const totalInvites = savedInvites.get(interaction.user.id) || 0;
       const totalBoosts = savedBoosts.get(interaction.user.id) || 0;
-      const totalBalance = totalInvites * INVITE_REWARD_MONEY + totalBoosts * BOOST_REWARD_MONEY;
+      const totalBalance = userBalances.get(interaction.user.id) || 0;
       const extraMessage = `💌 **INVITE CLAIM**\n<@${interaction.user.id}> wants to claim their invite reward.\n💌 Saved Invites: ${totalInvites}\n🚀 Saved Boosts: ${totalBoosts}\n💰 **Saved Balance:** ${totalBalance}M`;
       await createTicket(interaction, 'invite-boost', extraMessage);
     }
@@ -714,27 +716,42 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.customId.startsWith('invite_reward_save_')) {
       const inviterId = interaction.customId.replace('invite_reward_save_', '');
       if (interaction.user.id !== inviterId) return interaction.reply({ content: 'This button is only for the inviter!', ephemeral: true });
-      const current = savedInvites.get(interaction.user.id) || 0;
-      savedInvites.set(interaction.user.id, current + 1);
-      const totalInvites = savedInvites.get(interaction.user.id) || 0;
-      const totalBoosts = savedBoosts.get(interaction.user.id) || 0;
-      const totalBalance = totalInvites * INVITE_REWARD_MONEY + totalBoosts * BOOST_REWARD_MONEY;
-      await interaction.reply({ content: `You saved your invite reward! Saved invites: **${totalInvites}**\n💰 **Saved Balance:** ${totalBalance}M`, ephemeral: true });
+      
+      const currentInvites = savedInvites.get(interaction.user.id) || 0;
+      savedInvites.set(interaction.user.id, currentInvites + 1);
+      
+      const currentBalance = userBalances.get(interaction.user.id) || 0;
+      userBalances.set(interaction.user.id, currentBalance + INVITE_REWARD_MONEY);
+      
+      const totalBalance = userBalances.get(interaction.user.id) || 0;
+      await interaction.reply({ content: `You saved your invite reward! Saved invites: **${currentInvites + 1}**\n💰 **Saved Balance:** ${totalBalance}M`, ephemeral: true });
     }
 
     if (interaction.customId === 'cashout_button') {
-      const totalInvites = savedInvites.get(interaction.user.id) || 0;
-      const totalBoosts = savedBoosts.get(interaction.user.id) || 0;
-      const totalBalance = totalInvites * INVITE_REWARD_MONEY + totalBoosts * BOOST_REWARD_MONEY;
-      if (totalBalance <= 0) return interaction.reply({ content: 'You have no saved rewards to cash out.', ephemeral: true });
-      const extraMessage = `💰 **CASH OUT**\n<@${interaction.user.id}> wants to cash out their saved rewards.\n💌 Saved Invites: ${totalInvites}\n🚀 Saved Boosts: ${totalBoosts}\n💰 **Total Value:** ${totalBalance}M`;
-      await createTicket(interaction, 'invite-boost', extraMessage);
+      const totalBalance = userBalances.get(interaction.user.id) || 0;
+      if (totalBalance <= 0) return interaction.reply({ content: 'You have no balance to cash out.', ephemeral: true });
+
+      const modal = new ModalBuilder()
+        .setCustomId('cashout_amount_modal')
+        .setTitle('Cash Out');
+
+      const amountInput = new TextInputBuilder()
+        .setCustomId('cashout_amount')
+        .setLabel(`How much do you want to cash out? (Max: ${totalBalance}M)`)
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('e.g. 25')
+        .setMaxLength(10)
+        .setRequired(true);
+
+      modal.addComponents(new ActionRowBuilder().addComponents(amountInput));
+
+      await interaction.showModal(modal);
     }
 
     if (interaction.customId === 'check_balance_button') {
       const totalInvites = savedInvites.get(interaction.user.id) || 0;
       const totalBoosts = savedBoosts.get(interaction.user.id) || 0;
-      const totalBalance = totalInvites * INVITE_REWARD_MONEY + totalBoosts * BOOST_REWARD_MONEY;
+      const totalBalance = userBalances.get(interaction.user.id) || 0;
       const balanceEmbed = new EmbedBuilder()
         .setTitle('📊 **Your Balance**')
         .setDescription(
@@ -789,6 +806,27 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const row = new ActionRowBuilder().addComponents(acceptButton, denyButton);
       const appealsChannel = interaction.guild.channels.cache.get(APPEALS_LOGS_CHANNEL_ID);
       if (appealsChannel) { await appealsChannel.send({ embeds: [appealEmbed], components: [row] }); await interaction.reply({ content: 'Your appeal has been submitted!', ephemeral: true }); }
+    }
+    if (interaction.customId === 'cashout_amount_modal') {
+      const amountStr = interaction.fields.getTextInputValue('cashout_amount');
+      const amount = parseInt(amountStr);
+      
+      if (isNaN(amount) || amount <= 0) {
+        return interaction.reply({ content: 'Please enter a valid number.', ephemeral: true });
+      }
+      
+      const currentBalance = userBalances.get(interaction.user.id) || 0;
+      if (amount > currentBalance) {
+        return interaction.reply({ content: `You only have ${currentBalance}M. Please enter a smaller amount.`, ephemeral: true });
+      }
+      
+      userBalances.set(interaction.user.id, currentBalance - amount);
+      
+      const totalInvites = savedInvites.get(interaction.user.id) || 0;
+      const totalBoosts = savedBoosts.get(interaction.user.id) || 0;
+      
+      const extraMessage = `💰 **CASH OUT**\n<@${interaction.user.id}> wants to cash out **${amount}M**.\n💌 Saved Invites: ${totalInvites}\n🚀 Saved Boosts: ${totalBoosts}\n💰 **Remaining Balance:** ${currentBalance - amount}M`;
+      await createTicket(interaction, 'invite-boost', extraMessage);
     }
   }
 
