@@ -49,6 +49,8 @@ const PING_ROLE_IDS = [
   '1543370588725186672'
 ];
 
+const OWNER_ID = '1215207828713906222';
+
 const TICKET_LOGS_CHANNEL_ID = '1539942205475528734';
 const GIVEAWAY_CHANNEL_ID = '1539694123353772183';
 const TICKET_PANEL_CHANNEL_ID = '1539692765716283403';
@@ -63,6 +65,7 @@ const PRICES_CHANNEL_ID = '1539697766257659954';
 const MEDIA_REQUIREMENTS_CHANNEL_ID = '1539693647443001454';
 const REWARDS_INFO_CHANNEL_ID = '1539999315307667456';
 const LEADERBOARD_CHANNEL_ID = '1544673976226414613';
+const STAFF_STATUS_CHANNEL_ID = '1542625657652121620';
 
 const SERVER_INVITE = 'https://discord.gg/pingpongshangout';
 const BOT_NAME = "PingPong's Hangout Manager";
@@ -122,25 +125,12 @@ async function checkToxicityWithSightengine(text) {
 async function sbGetBalance(userId) {
   try {
     const response = await fetch(`${SUPABASE_URL}/rest/v1/balances?user_id=eq.${userId}&select=*`, {
-      method: 'GET',
-      headers: {
-        'apikey': SUPABASE_SERVICE_ROLE_KEY,
-        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
-      }
+      headers: { 'apikey': SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` }
     });
     const data = await response.json();
-    if (data && data.length > 0) {
-      return {
-        invites: data[0].invites || 0,
-        boosts: data[0].boosts || 0,
-        money: data[0].money || 0
-      };
-    }
+    if (data && data.length > 0) return { invites: data[0].invites || 0, boosts: data[0].boosts || 0, money: data[0].money || 0 };
     return null;
-  } catch (error) {
-    console.error('Supabase GET error:', error);
-    return null;
-  }
+  } catch (error) { return null; }
 }
 
 async function sbUpdateBalance(userId, invites, boosts, money) {
@@ -149,91 +139,86 @@ async function sbUpdateBalance(userId, invites, boosts, money) {
     if (existing) {
       await fetch(`${SUPABASE_URL}/rest/v1/balances?user_id=eq.${userId}`, {
         method: 'PATCH',
-        headers: {
-          'apikey': SUPABASE_SERVICE_ROLE_KEY,
-          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'apikey': SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ invites, boosts, money })
       });
     } else {
       await fetch(`${SUPABASE_URL}/rest/v1/balances`, {
         method: 'POST',
-        headers: {
-          'apikey': SUPABASE_SERVICE_ROLE_KEY,
-          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'apikey': SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId, invites, boosts, money })
       });
     }
-  } catch (error) {
-    console.error('Supabase UPDATE error:', error);
-  }
+  } catch (error) {}
 }
 
 async function sbIsProcessed(messageId) {
   try {
     const response = await fetch(`${SUPABASE_URL}/rest/v1/processed_rewards?message_id=eq.${messageId}&select=*`, {
-      method: 'GET',
-      headers: {
-        'apikey': SUPABASE_SERVICE_ROLE_KEY,
-        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
-      }
+      headers: { 'apikey': SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` }
     });
     const data = await response.json();
     return data && data.length > 0;
-  } catch (error) {
-    console.error('Supabase processed check error:', error);
-    return false;
-  }
+  } catch (error) { return false; }
 }
 
 async function sbMarkProcessed(messageId) {
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/processed_rewards`, {
       method: 'POST',
-      headers: {
-        'apikey': SUPABASE_SERVICE_ROLE_KEY,
-        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        'Content-Type': 'application/json'
-      },
+      headers: { 'apikey': SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ message_id: messageId })
     });
-  } catch (error) {
-    console.error('Supabase mark processed error:', error);
-  }
+  } catch (error) {}
+}
+
+// ==================== LEADERBOARD FUNCTIONS ====================
+async function getTopInvites() {
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/balances?select=user_id,invites&order=invites.desc&limit=5`, {
+    headers: { 'apikey': SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` }
+  });
+  return await response.json();
+}
+
+async function getTopBoosts() {
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/balances?select=user_id,boosts&order=boosts.desc&limit=5`, {
+    headers: { 'apikey': SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` }
+  });
+  return await response.json();
+}
+
+async function getTopMoney() {
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/balances?select=user_id,money&order=money.desc&limit=5`, {
+    headers: { 'apikey': SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` }
+  });
+  return await response.json();
+}
+
+async function getUserRank(userId, type) {
+  const order = type === 'invite' ? 'invites' : type === 'boost' ? 'boosts' : 'money';
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/balances?select=user_id,${order}&order=${order}.desc`, {
+    headers: { 'apikey': SUPABASE_SERVICE_ROLE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` }
+  });
+  const data = await response.json();
+  const index = data.findIndex(item => item.user_id === userId);
+  if (index === -1) return null;
+  return { position: index + 1, value: data[index][order] || 0 };
 }
 
 // ==================== TICKET TYPES ====================
 const TICKET_TYPES = {
-  'purchase': 'purchase',
-  'support': 'support',
-  'media': 'media',
-  'partnership': 'partnership',
-  'sponsor': 'sponsor',
-  'invite-boost': 'invite-boost',
-  'claim': 'claim'
+  'purchase': 'purchase', 'support': 'support', 'media': 'media',
+  'partnership': 'partnership', 'sponsor': 'sponsor', 'invite-boost': 'invite-boost', 'claim': 'claim'
 };
 
 const TICKET_EMOJIS = {
-  'purchase': '💸',
-  'support': '🌐',
-  'media': '📸',
-  'partnership': '👥',
-  'sponsor': '💎',
-  'invite-boost': '🎁',
-  'claim': '🎉'
+  'purchase': '💸', 'support': '🌐', 'media': '📸',
+  'partnership': '👥', 'sponsor': '💎', 'invite-boost': '🎁', 'claim': '🎉'
 };
 
 const TICKET_LABELS = {
-  'purchase': 'Purchase',
-  'support': 'Support',
-  'media': 'Media',
-  'partnership': 'Partnership',
-  'sponsor': 'Sponsor',
-  'invite-boost': 'Invite/Boost Reward Claim',
-  'claim': 'Giveaway Claim'
+  'purchase': 'Purchase', 'support': 'Support', 'media': 'Media',
+  'partnership': 'Partnership', 'sponsor': 'Sponsor', 'invite-boost': 'Invite/Boost Reward Claim', 'claim': 'Giveaway Claim'
 };
 
 // ==================== CLIENT SETUP ====================
@@ -265,9 +250,7 @@ async function getTicketCategory(guild) {
     category = await guild.channels.create({
       name: 'Tickets',
       type: ChannelType.GuildCategory,
-      permissionOverwrites: [
-        { id: guild.roles.everyone, deny: [PermissionFlagsBits.ViewChannel] }
-      ]
+      permissionOverwrites: [{ id: guild.roles.everyone, deny: [PermissionFlagsBits.ViewChannel] }]
     });
   }
   return category;
@@ -284,9 +267,7 @@ async function createTicket(interaction, ticketType, extraMessage) {
   const channelName = `${shortType}-${safeUsername}`;
 
   const existing = guild.channels.cache.find(c => c.name === channelName);
-  if (existing) {
-    return interaction.reply({ content: `You already have a ticket open: ${existing}`, ephemeral: true });
-  }
+  if (existing) return interaction.reply({ content: `You already have a ticket open: ${existing}`, ephemeral: true });
 
   const permissionOverwrites = [
     { id: guild.roles.everyone, deny: [PermissionFlagsBits.ViewChannel] },
@@ -294,53 +275,23 @@ async function createTicket(interaction, ticketType, extraMessage) {
   ];
 
   for (const roleId of STAFF_ROLE_IDS) {
-    permissionOverwrites.push({
-      id: roleId,
-      allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels]
-    });
+    permissionOverwrites.push({ id: roleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] });
   }
 
-  const channel = await guild.channels.create({
-    name: channelName,
-    type: ChannelType.GuildText,
-    parent: category.id,
-    permissionOverwrites: permissionOverwrites
-  });
-
+  const channel = await guild.channels.create({ name: channelName, type: ChannelType.GuildText, parent: category.id, permissionOverwrites });
   ticketCreatedAt.set(channel.id, Date.now());
 
-  const claimButton = new ButtonBuilder()
-    .setCustomId('claim_ticket')
-    .setLabel('Claim')
-    .setStyle(ButtonStyle.Success)
-    .setEmoji('✅');
-
-  const renameButton = new ButtonBuilder()
-    .setCustomId('rename_ticket')
-    .setLabel('Rename')
-    .setStyle(ButtonStyle.Secondary)
-    .setEmoji('✏️');
-
-  const closeButton = new ButtonBuilder()
-    .setCustomId('close_ticket')
-    .setLabel('Close')
-    .setStyle(ButtonStyle.Danger)
-    .setEmoji('🔒');
-
+  const claimButton = new ButtonBuilder().setCustomId('claim_ticket').setLabel('Claim').setStyle(ButtonStyle.Success).setEmoji('✅');
+  const renameButton = new ButtonBuilder().setCustomId('rename_ticket').setLabel('Rename').setStyle(ButtonStyle.Secondary).setEmoji('✏️');
+  const closeButton = new ButtonBuilder().setCustomId('close_ticket').setLabel('Close').setStyle(ButtonStyle.Danger).setEmoji('🔒');
   const row = new ActionRowBuilder().addComponents(claimButton, renameButton, closeButton);
 
   const pingRoles = PING_ROLE_IDS.map(id => `<@&${id}>`).join(' ');
   const emoji = TICKET_EMOJIS[ticketType] || '🎫';
   const label = TICKET_LABELS[ticketType] || ticketType;
-
   const description = extraMessage || 'Hello! Our Staff Team is currently reviewing your Ticket and will respond soon! After 12 hours of no response, please Ping someone from our Staff Team! Thank You!';
 
-  const welcomeEmbed = new EmbedBuilder()
-    .setTitle(`${emoji} ${label} Ticket`)
-    .setDescription(description)
-    .setColor(0x00AE86)
-    .setFooter({ text: BOT_NAME });
-
+  const welcomeEmbed = new EmbedBuilder().setTitle(`${emoji} ${label} Ticket`).setDescription(description).setColor(0x00AE86).setFooter({ text: BOT_NAME });
   await channel.send({ content: `${pingRoles}`, embeds: [welcomeEmbed], components: [row] });
 
   setTimeout(async () => {
@@ -360,27 +311,18 @@ async function createTicket(interaction, ticketType, extraMessage) {
 async function closeTicket(interaction) {
   const channel = interaction.channel;
   const logsChannel = interaction.guild.channels.cache.get(TICKET_LOGS_CHANNEL_ID);
-
   const messages = await channel.messages.fetch({ limit: 100 });
   const transcript = messages.reverse().map(m => `[${m.createdAt.toISOString()}] ${m.author.tag}: ${m.content}`).join('\n');
 
   if (logsChannel) {
-    const transcriptEmbed = new EmbedBuilder()
-      .setTitle(`Ticket Closed: ${channel.name}`)
-      .setDescription('```\n' + transcript.slice(0, 4000) + '\n```')
-      .setColor(0xFF0000)
-      .setFooter({ text: `Closed by ${interaction.user.tag}` });
-
+    const transcriptEmbed = new EmbedBuilder().setTitle(`Ticket Closed: ${channel.name}`).setDescription('```\n' + transcript.slice(0, 4000) + '\n```').setColor(0xFF0000).setFooter({ text: `Closed by ${interaction.user.tag}` });
     await logsChannel.send({ embeds: [transcriptEmbed] });
   }
 
   claimedTickets.delete(channel.id);
   ticketCreatedAt.delete(channel.id);
-
   await interaction.reply({ content: 'Closing ticket...', ephemeral: true });
-  setTimeout(async () => {
-    await channel.delete().catch(() => {});
-  }, 5000);
+  setTimeout(async () => { await channel.delete().catch(() => {}); }, 5000);
 }
 
 // ==================== GIVEAWAY FUNCTIONS ====================
@@ -388,16 +330,12 @@ async function endGiveaway(giveawayId) {
   const giveaway = giveaways.get(giveawayId);
   if (!giveaway) return;
 
-  const { channelId, prize, winnersCount, messageId, hosterId } = giveaway;
+  const { channelId, prize, winnersCount, hosterId } = giveaway;
   const channel = client.channels.cache.get(channelId);
   if (!channel) return;
 
   const participants = giveaway.participants || [];
-  if (participants.length === 0) {
-    await channel.send('No one entered the giveaway!');
-    giveaways.delete(giveawayId);
-    return;
-  }
+  if (participants.length === 0) { await channel.send('No one entered the giveaway!'); giveaways.delete(giveawayId); return; }
 
   const winners = [];
   const pool = [...participants];
@@ -407,58 +345,31 @@ async function endGiveaway(giveawayId) {
   }
 
   for (const winnerId of winners) {
-    const winnerEmbed = new EmbedBuilder()
-      .setTitle('🎉 Giveaway Winner!')
-      .setDescription(`<@${winnerId}> You've won the Giveaway! Prize: **${prize}**`)
-      .setColor(0xFFD700);
-
-    const claimButton = new ButtonBuilder()
-      .setCustomId(`claim_giveaway_${giveawayId}_${winnerId}`)
-      .setLabel('CLAIM')
-      .setStyle(ButtonStyle.Success)
-      .setEmoji('🎉');
-
-    const rerollButton = new ButtonBuilder()
-      .setCustomId(`reroll_giveaway_${giveawayId}`)
-      .setLabel('REROLL')
-      .setStyle(ButtonStyle.Danger)
-      .setEmoji('🔄');
-
+    const winnerEmbed = new EmbedBuilder().setTitle('🎉 Giveaway Winner!').setDescription(`<@${winnerId}> You've won the Giveaway! Prize: **${prize}**`).setColor(0xFFD700);
+    const claimButton = new ButtonBuilder().setCustomId(`claim_giveaway_${giveawayId}_${winnerId}`).setLabel('CLAIM').setStyle(ButtonStyle.Success).setEmoji('🎉');
+    const rerollButton = new ButtonBuilder().setCustomId(`reroll_giveaway_${giveawayId}`).setLabel('REROLL').setStyle(ButtonStyle.Danger).setEmoji('🔄');
     const row = new ActionRowBuilder().addComponents(claimButton, rerollButton);
     await channel.send({ embeds: [winnerEmbed], components: [row] });
   }
 
-  // Save winners to giveaway for reroll
   giveaway.winners = winners;
   giveaways.set(giveawayId, giveaway);
 }
 
 async function rerollGiveaway(giveawayId, interaction) {
   const giveaway = giveaways.get(giveawayId);
-  if (!giveaway) {
-    return interaction.reply({ content: 'Giveaway not found!', ephemeral: true });
-  }
+  if (!giveaway) return interaction.reply({ content: 'Giveaway not found!', ephemeral: true });
+  if (!isStaff(interaction.member) && interaction.user.id !== giveaway.hosterId) return interaction.reply({ content: 'Only staff or the giveaway hoster can reroll!', ephemeral: true });
 
-  // Check if user is staff or hoster
-  if (!isStaff(interaction.member) && interaction.user.id !== giveaway.hosterId) {
-    return interaction.reply({ content: 'Only staff or the giveaway hoster can reroll!', ephemeral: true });
-  }
-
-  const { channelId, prize, winnersCount, messageId, participants } = giveaway;
+  const { channelId, prize, winnersCount, participants } = giveaway;
   const channel = client.channels.cache.get(channelId);
   if (!channel) return;
 
-  if (!participants || participants.length === 0) {
-    return interaction.reply({ content: 'No participants to reroll!', ephemeral: true });
-  }
+  if (!participants || participants.length === 0) return interaction.reply({ content: 'No participants to reroll!', ephemeral: true });
 
-  // Remove previous winners from pool
   const previousWinners = giveaway.winners || [];
   const pool = participants.filter(id => !previousWinners.includes(id));
-  
-  if (pool.length === 0) {
-    return interaction.reply({ content: 'No eligible participants for reroll!', ephemeral: true });
-  }
+  if (pool.length === 0) return interaction.reply({ content: 'No eligible participants for reroll!', ephemeral: true });
 
   const winners = [];
   for (let i = 0; i < Math.min(winnersCount, pool.length); i++) {
@@ -467,31 +378,15 @@ async function rerollGiveaway(giveawayId, interaction) {
   }
 
   for (const winnerId of winners) {
-    const winnerEmbed = new EmbedBuilder()
-      .setTitle('🎉 Giveaway Winner (Reroll)!')
-      .setDescription(`<@${winnerId}> You've won the Giveaway! Prize: **${prize}**`)
-      .setColor(0xFFD700);
-
-    const claimButton = new ButtonBuilder()
-      .setCustomId(`claim_giveaway_${giveawayId}_${winnerId}`)
-      .setLabel('CLAIM')
-      .setStyle(ButtonStyle.Success)
-      .setEmoji('🎉');
-
-    const rerollButton = new ButtonBuilder()
-      .setCustomId(`reroll_giveaway_${giveawayId}`)
-      .setLabel('REROLL')
-      .setStyle(ButtonStyle.Danger)
-      .setEmoji('🔄');
-
+    const winnerEmbed = new EmbedBuilder().setTitle('🎉 Giveaway Winner (Reroll)!').setDescription(`<@${winnerId}> You've won the Giveaway! Prize: **${prize}**`).setColor(0xFFD700);
+    const claimButton = new ButtonBuilder().setCustomId(`claim_giveaway_${giveawayId}_${winnerId}`).setLabel('CLAIM').setStyle(ButtonStyle.Success).setEmoji('🎉');
+    const rerollButton = new ButtonBuilder().setCustomId(`reroll_giveaway_${giveawayId}`).setLabel('REROLL').setStyle(ButtonStyle.Danger).setEmoji('🔄');
     const row = new ActionRowBuilder().addComponents(claimButton, rerollButton);
     await channel.send({ embeds: [winnerEmbed], components: [row] });
   }
 
-  // Update winners
   giveaway.winners = [...(giveaway.winners || []), ...winners];
   giveaways.set(giveawayId, giveaway);
-
   await interaction.reply({ content: 'Giveaway rerolled!', ephemeral: true });
 }
 
@@ -499,13 +394,7 @@ async function rerollGiveaway(giveawayId, interaction) {
 client.on(Events.GuildMemberAdd, async (member) => {
   const channel = member.guild.channels.cache.get(WELCOME_GOODBYE_CHANNEL_ID);
   if (channel) {
-    const welcomeEmbed = new EmbedBuilder()
-      .setTitle('👋 Welcome!')
-      .setDescription(`Welcome <@${member.id}>! Hope you will enjoy your time here with our Community!`)
-      .setColor(0x00FF00)
-      .setThumbnail(member.user.displayAvatarURL())
-      .setTimestamp();
-    
+    const welcomeEmbed = new EmbedBuilder().setTitle('👋 Welcome!').setDescription(`Welcome <@${member.id}>! Hope you will enjoy your time here with our Community!`).setColor(0x00FF00).setThumbnail(member.user.displayAvatarURL()).setTimestamp();
     await channel.send({ embeds: [welcomeEmbed] });
   }
 
@@ -513,39 +402,62 @@ client.on(Events.GuildMemberAdd, async (member) => {
     const newInvites = await member.guild.invites.fetch();
     for (const invite of newInvites.values()) {
       const cachedInvite = inviteCache.get(invite.code);
-      
       if (cachedInvite && invite.uses > cachedInvite.uses) {
         const inviter = invite.inviter;
-        
         if (inviter && inviter.id !== member.id) {
           const trackingChannel = member.guild.channels.cache.get(INVITE_TRACKING_CHANNEL_ID);
           if (trackingChannel) {
             const inviteEmbed = new EmbedBuilder()
-              .setDescription(`<@${member.id}> have just joined through <@${inviter.id}> link! Use button below to claim your money!`)
+              .setDescription(`<@${member.id}> have just joined through <@${inviter.id}> link!\n\n🔒 **Buttons will unlock in 3 hours** if the user stays on the server.`)
               .setColor(0xFFD700)
               .setTimestamp();
 
             const claimButton = new ButtonBuilder()
               .setCustomId(`invite_reward_claim_${inviter.id}`)
-              .setLabel('CLAIM')
-              .setStyle(ButtonStyle.Success)
-              .setEmoji('✅');
+              .setLabel('CLAIM (Locked)')
+              .setStyle(ButtonStyle.Secondary)
+              .setEmoji('🔒')
+              .setDisabled(true);
 
             const saveButton = new ButtonBuilder()
               .setCustomId(`invite_reward_save_${inviter.id}`)
-              .setLabel('SAVE IT')
+              .setLabel('SAVE IT (Locked)')
               .setStyle(ButtonStyle.Secondary)
-              .setEmoji('💾');
+              .setEmoji('🔒')
+              .setDisabled(true);
 
             const row = new ActionRowBuilder().addComponents(claimButton, saveButton);
-            await trackingChannel.send({ embeds: [inviteEmbed], components: [row] });
+            const msg = await trackingChannel.send({ embeds: [inviteEmbed], components: [row] });
+
+            // Unlock after 3 hours
+            setTimeout(async () => {
+              try {
+                const unlockedClaimButton = new ButtonBuilder()
+                  .setCustomId(`invite_reward_claim_${inviter.id}`)
+                  .setLabel('CLAIM')
+                  .setStyle(ButtonStyle.Success)
+                  .setEmoji('✅')
+                  .setDisabled(false);
+
+                const unlockedSaveButton = new ButtonBuilder()
+                  .setCustomId(`invite_reward_save_${inviter.id}`)
+                  .setLabel('SAVE IT')
+                  .setStyle(ButtonStyle.Primary)
+                  .setEmoji('💾')
+                  .setDisabled(false);
+
+                const unlockedRow = new ActionRowBuilder().addComponents(unlockedClaimButton, unlockedSaveButton);
+                const unlockedEmbed = new EmbedBuilder()
+                  .setDescription(`<@${member.id}> have just joined through <@${inviter.id}> link!\n\n✅ **Buttons unlocked!** You can now claim or save your reward.`)
+                  .setColor(0x00FF00)
+                  .setTimestamp();
+
+                await msg.edit({ embeds: [unlockedEmbed], components: [unlockedRow] });
+              } catch (error) {}
+            }, 3 * 60 * 60 * 1000);
           }
         }
-
-        inviteCache.set(invite.code, {
-          inviterId: invite.inviter?.id,
-          uses: invite.uses || 0
-        });
+        inviteCache.set(invite.code, { inviterId: invite.inviter?.id, uses: invite.uses || 0 });
       }
     }
   } catch (error) {
@@ -554,10 +466,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
 });
 
 client.on(Events.InviteCreate, async (invite) => {
-  inviteCache.set(invite.code, {
-    inviterId: invite.inviter?.id,
-    uses: invite.uses || 0
-  });
+  inviteCache.set(invite.code, { inviterId: invite.inviter?.id, uses: invite.uses || 0 });
 });
 
 client.on(Events.InviteDelete, async (invite) => {
@@ -567,27 +476,14 @@ client.on(Events.InviteDelete, async (invite) => {
 client.on(Events.GuildMemberRemove, async (member) => {
   const channel = member.guild.channels.cache.get(WELCOME_GOODBYE_CHANNEL_ID);
   if (!channel) return;
-  
-  const farewellEmbed = new EmbedBuilder()
-    .setTitle('👋 Goodbye!')
-    .setDescription(`<@${member.id}> has officially left us :( \nGoodbye!`)
-    .setColor(0xFF0000)
-    .setThumbnail(member.user.displayAvatarURL())
-    .setTimestamp();
-  
+  const farewellEmbed = new EmbedBuilder().setTitle('👋 Goodbye!').setDescription(`<@${member.id}> has officially left us :( \nGoodbye!`).setColor(0xFF0000).setThumbnail(member.user.displayAvatarURL()).setTimestamp();
   await channel.send({ embeds: [farewellEmbed] });
 });
 
 client.on(Events.GuildBanAdd, async (ban) => {
   const channel = ban.guild.channels.cache.get(WELCOME_GOODBYE_CHANNEL_ID);
   if (!channel) return;
-  
-  const banEmbed = new EmbedBuilder()
-    .setTitle('🔨 User Banned')
-    .setDescription(`<@${ban.user.id}> had flew too close to the sun and got banned! Farewell!`)
-    .setColor(0xFF0000)
-    .setTimestamp();
-  
+  const banEmbed = new EmbedBuilder().setTitle('🔨 User Banned').setDescription(`<@${ban.user.id}> had flew too close to the sun and got banned! Farewell!`).setColor(0xFF0000).setTimestamp();
   await channel.send({ embeds: [banEmbed] });
 });
 
@@ -595,15 +491,12 @@ client.on(Events.GuildBanAdd, async (ban) => {
 client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
   const oldBoosting = Boolean(oldMember.premiumSince);
   const newBoosting = Boolean(newMember.premiumSince);
-
   if (!oldBoosting && newBoosting) {
     const balance = await sbGetBalance(newMember.id);
     const currentBoosts = balance ? balance.boosts : 0;
     const currentMoney = balance ? balance.money : 0;
     const currentInvites = balance ? balance.invites : 0;
-    
     await sbUpdateBalance(newMember.id, currentInvites, currentBoosts + 1, currentMoney + BOOST_REWARD_MONEY);
-    console.log(`✅ ${newMember.user.tag} started boosting!`);
   }
 });
 
@@ -615,61 +508,69 @@ client.on(Events.MessageCreate, async (message) => {
   const isToxic = await checkToxicityWithSightengine(message.content);
   if (isToxic === true) {
     await message.delete().catch(() => {});
-    
-    const warnEmbed = new EmbedBuilder()
-      .setTitle('⚠️ Message Removed')
-      .setDescription('Your message was flagged by AI as inappropriate.')
-      .setColor(0xFF0000)
-      .setFooter({ text: BOT_NAME })
-      .setTimestamp();
-    
+    const warnEmbed = new EmbedBuilder().setTitle('⚠️ Message Removed').setDescription('Your message was flagged by AI as inappropriate.').setColor(0xFF0000).setFooter({ text: BOT_NAME }).setTimestamp();
     await message.author.send({ embeds: [warnEmbed] }).catch(() => {});
     return;
   }
   
   if (containsBadWord(message.content)) {
     await message.delete().catch(() => {});
-    
-    const warnEmbed = new EmbedBuilder()
-      .setTitle('⚠️ Message Removed')
-      .setDescription('Your message was removed for containing inappropriate language.')
-      .setColor(0xFF0000)
-      .setFooter({ text: BOT_NAME })
-      .setTimestamp();
-    
+    const warnEmbed = new EmbedBuilder().setTitle('⚠️ Message Removed').setDescription('Your message was removed for containing inappropriate language.').setColor(0xFF0000).setFooter({ text: BOT_NAME }).setTimestamp();
     await message.author.send({ embeds: [warnEmbed] }).catch(() => {});
     return;
   }
 
   const channel = message.channel;
-  
   if (channel.parentId !== TICKET_CATEGORY_ID) return;
   if (!channel.name.startsWith('ticket-') && !channel.name.startsWith('claimed-')) return;
-  
   if (claimedTickets.has(channel.id)) return;
-  
   if (!isStaff(message.member)) return;
   
   claimedTickets.set(channel.id, message.author.id);
-  
   const originalName = channel.name.replace(/^(ticket-|claimed-)/, '');
   const safeStaffName = message.author.username.toLowerCase().replace(/[^a-z0-9]/g, '');
   await channel.setName(`claimed-${safeStaffName}-${originalName}`).catch(() => {});
   
-  const claimEmbed = new EmbedBuilder()
-    .setTitle('✅ Ticket Claimed')
-    .setDescription(`This ticket has been claimed by <@${message.author.id}>`)
-    .setColor(0x00FF00)
-    .setFooter({ text: BOT_NAME })
-    .setTimestamp();
-  
+  const claimEmbed = new EmbedBuilder().setTitle('✅ Ticket Claimed').setDescription(`This ticket has been claimed by <@${message.author.id}>`).setColor(0x00FF00).setFooter({ text: BOT_NAME }).setTimestamp();
   await channel.send({ embeds: [claimEmbed] });
 });
+
+// ==================== STAFF STATUS ====================
+let staffOnline = false;
+
+async function updateStaffPanel() {
+  try {
+    const channel = client.channels.cache.get(STAFF_STATUS_CHANNEL_ID);
+    if (!channel) return;
+    
+    const color = staffOnline ? 0x00FF00 : 0xFF0000;
+    const title = staffOnline ? '🟢 **STAFF TEAM IS ONLINE**' : '🔴 **STAFF TEAM IS OFFLINE**';
+    const description = staffOnline 
+      ? 'Our Staff Team is currently **online** and ready to help you!\n\nIf you need assistance, open a ticket! 🎫'
+      : 'Our Staff Team is currently **offline**.\n\nPlease be patient, we will respond when we\'re back! 😴';
+    
+    const embed = new EmbedBuilder().setTitle(title).setDescription(description).setColor(color).setFooter({ text: BOT_NAME }).setTimestamp();
+    
+    const onlineButton = new ButtonBuilder().setCustomId('staff_online').setLabel('ONLINE').setStyle(ButtonStyle.Success).setEmoji('🟢');
+    const offlineButton = new ButtonBuilder().setCustomId('staff_offline').setLabel('OFFLINE').setStyle(ButtonStyle.Danger).setEmoji('🔴');
+    const row = new ActionRowBuilder().addComponents(onlineButton, offlineButton);
+    
+    const messages = await channel.messages.fetch({ limit: 5 });
+    const existing = messages.find(m => m.embeds[0]?.title?.includes('STAFF TEAM'));
+    
+    if (existing) {
+      await existing.edit({ embeds: [embed], components: [row] });
+    } else {
+      await channel.send({ embeds: [embed], components: [row] });
+    }
+  } catch (error) {
+    console.error('Error updating staff panel:', error);
+  }
+}
 
 // ==================== EVENT: CLIENT READY ====================
 client.once(Events.ClientReady, async (c) => {
   console.log(`✅ Bot logged in as ${c.user.tag}`);
-
   await c.user.setUsername(BOT_NAME).catch(() => {});
   await c.user.setActivity("PingPong's Hangout", { type: 3 });
 
@@ -681,6 +582,8 @@ client.once(Events.ClientReady, async (c) => {
       }
     } catch (error) {}
   }
+
+  await updateStaffPanel();
 
   // Cool panels
   try {
@@ -748,51 +651,51 @@ client.once(Events.ClientReady, async (c) => {
     }
   } catch (error) {}
 
-  // Leaderboard panels
+  // Leaderboard panels with timer
   try {
     const lbChannel = c.channels.cache.get(LEADERBOARD_CHANNEL_ID);
     if (lbChannel) {
-      const inviteEmbed = new EmbedBuilder()
-        .setTitle('💌 **TOP 5 INVITES**')
-        .setDescription('Loading leaderboard...')
-        .setColor(0x3498DB)
-        .setFooter({ text: BOT_NAME })
-        .setTimestamp();
-      const invitePositionButton = new ButtonBuilder()
-        .setCustomId('lb_invite_position')
-        .setLabel('My Position')
-        .setStyle(ButtonStyle.Primary)
-        .setEmoji('📊');
+      const inviteLB = await getTopInvites();
+      const inviteDesc = inviteLB.length > 0 ? inviteLB.map((item, i) => `**${i+1}.** <@${item.user_id}> - ${item.invites} invite(s)`).join('\n') : 'No invites yet.';
+      const inviteEmbed = new EmbedBuilder().setTitle('💌 **TOP 5 INVITES**').setDescription(inviteDesc).setColor(0x3498DB).setFooter({ text: `${BOT_NAME} • Resets in 1 hour` }).setTimestamp();
+      const invitePositionButton = new ButtonBuilder().setCustomId('lb_invite_position').setLabel('My Position').setStyle(ButtonStyle.Primary).setEmoji('📊');
       const inviteRow = new ActionRowBuilder().addComponents(invitePositionButton);
       await lbChannel.send({ embeds: [inviteEmbed], components: [inviteRow] });
 
-      const boostEmbed = new EmbedBuilder()
-        .setTitle('🚀 **TOP 5 BOOSTS**')
-        .setDescription('Loading leaderboard...')
-        .setColor(0xE74C3C)
-        .setFooter({ text: BOT_NAME })
-        .setTimestamp();
-      const boostPositionButton = new ButtonBuilder()
-        .setCustomId('lb_boost_position')
-        .setLabel('My Position')
-        .setStyle(ButtonStyle.Primary)
-        .setEmoji('📊');
+      const boostLB = await getTopBoosts();
+      const boostDesc = boostLB.length > 0 ? boostLB.map((item, i) => `**${i+1}.** <@${item.user_id}> - ${item.boosts} boost(s)`).join('\n') : 'No boosts yet.';
+      const boostEmbed = new EmbedBuilder().setTitle('🚀 **TOP 5 BOOSTS**').setDescription(boostDesc).setColor(0xE74C3C).setFooter({ text: `${BOT_NAME} • Resets in 1 hour` }).setTimestamp();
+      const boostPositionButton = new ButtonBuilder().setCustomId('lb_boost_position').setLabel('My Position').setStyle(ButtonStyle.Primary).setEmoji('📊');
       const boostRow = new ActionRowBuilder().addComponents(boostPositionButton);
       await lbChannel.send({ embeds: [boostEmbed], components: [boostRow] });
 
-      const moneyEmbed = new EmbedBuilder()
-        .setTitle('💰 **TOP 5 MONEY**')
-        .setDescription('Loading leaderboard...')
-        .setColor(0xF1C40F)
-        .setFooter({ text: BOT_NAME })
-        .setTimestamp();
-      const moneyPositionButton = new ButtonBuilder()
-        .setCustomId('lb_money_position')
-        .setLabel('My Position')
-        .setStyle(ButtonStyle.Primary)
-        .setEmoji('📊');
+      const moneyLB = await getTopMoney();
+      const moneyDesc = moneyLB.length > 0 ? moneyLB.map((item, i) => `**${i+1}.** <@${item.user_id}> - ${item.money}M`).join('\n') : 'No money yet.';
+      const moneyEmbed = new EmbedBuilder().setTitle('💰 **TOP 5 MONEY**').setDescription(moneyDesc).setColor(0xF1C40F).setFooter({ text: `${BOT_NAME} • Resets in 1 hour` }).setTimestamp();
+      const moneyPositionButton = new ButtonBuilder().setCustomId('lb_money_position').setLabel('My Position').setStyle(ButtonStyle.Primary).setEmoji('📊');
       const moneyRow = new ActionRowBuilder().addComponents(moneyPositionButton);
       await lbChannel.send({ embeds: [moneyEmbed], components: [moneyRow] });
+
+      setInterval(async () => {
+        try {
+          const messages = await lbChannel.messages.fetch({ limit: 10 });
+          
+          const inviteLB2 = await getTopInvites();
+          const inviteDesc2 = inviteLB2.length > 0 ? inviteLB2.map((item, i) => `**${i+1}.** <@${item.user_id}> - ${item.invites} invite(s)`).join('\n') : 'No invites yet.';
+          const inviteMsg = messages.find(m => m.embeds[0]?.title?.includes('TOP 5 INVITES'));
+          if (inviteMsg) { const embed = EmbedBuilder.from(inviteMsg.embeds[0]); embed.setDescription(inviteDesc2); embed.setTimestamp(); await inviteMsg.edit({ embeds: [embed] }); }
+
+          const boostLB2 = await getTopBoosts();
+          const boostDesc2 = boostLB2.length > 0 ? boostLB2.map((item, i) => `**${i+1}.** <@${item.user_id}> - ${item.boosts} boost(s)`).join('\n') : 'No boosts yet.';
+          const boostMsg = messages.find(m => m.embeds[0]?.title?.includes('TOP 5 BOOSTS'));
+          if (boostMsg) { const embed = EmbedBuilder.from(boostMsg.embeds[0]); embed.setDescription(boostDesc2); embed.setTimestamp(); await boostMsg.edit({ embeds: [embed] }); }
+
+          const moneyLB2 = await getTopMoney();
+          const moneyDesc2 = moneyLB2.length > 0 ? moneyLB2.map((item, i) => `**${i+1}.** <@${item.user_id}> - ${item.money}M`).join('\n') : 'No money yet.';
+          const moneyMsg = messages.find(m => m.embeds[0]?.title?.includes('TOP 5 MONEY'));
+          if (moneyMsg) { const embed = EmbedBuilder.from(moneyMsg.embeds[0]); embed.setDescription(moneyDesc2); embed.setTimestamp(); await moneyMsg.edit({ embeds: [embed] }); }
+        } catch (error) { console.error('Error refreshing leaderboards:', error); }
+      }, 60 * 60 * 1000);
     }
   } catch (error) {}
 
@@ -835,6 +738,8 @@ client.once(Events.ClientReady, async (c) => {
     new SlashCommandBuilder().setName('balremove').setDescription('Remove money (M) from a user').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .addUserOption(opt => opt.setName('user').setDescription('User to remove money from').setRequired(true))
       .addIntegerOption(opt => opt.setName('amount').setDescription('Amount in M').setRequired(true)),
+    new SlashCommandBuilder().setName('balcheck').setDescription('Check a user\'s balance (Owner only)')
+      .addUserOption(opt => opt.setName('user').setDescription('User to check').setRequired(true)),
     new SlashCommandBuilder().setName('lb').setDescription('Show your position in leaderboards')
       .addStringOption(opt => opt.setName('type').setDescription('Leaderboard type').setRequired(true)
         .addChoices(
@@ -915,6 +820,20 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await rerollGiveaway(giveawayId, interaction);
     }
 
+    if (interaction.customId === 'staff_online') {
+      if (!isStaff(interaction.member)) return interaction.reply({ content: 'Only staff can change status!', ephemeral: true });
+      staffOnline = true;
+      await updateStaffPanel();
+      await interaction.reply({ content: 'Staff Team is now ONLINE!', ephemeral: true });
+    }
+
+    if (interaction.customId === 'staff_offline') {
+      if (!isStaff(interaction.member)) return interaction.reply({ content: 'Only staff can change status!', ephemeral: true });
+      staffOnline = false;
+      await updateStaffPanel();
+      await interaction.reply({ content: 'Staff Team is now OFFLINE!', ephemeral: true });
+    }
+
     if (interaction.customId === 'open_suggestion_modal') {
       const modal = new ModalBuilder().setCustomId('suggestion_modal').setTitle('Submit a Suggestion');
       const suggestionInput = new TextInputBuilder().setCustomId('suggestion_text').setLabel('Your Suggestion').setStyle(TextInputStyle.Paragraph).setPlaceholder('Write your suggestion here...').setMaxLength(1000).setRequired(true);
@@ -928,9 +847,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       
       const messageId = interaction.message.id;
       const isProcessed = await sbIsProcessed(messageId);
-      if (isProcessed) {
-        return interaction.reply({ content: 'This reward has already been claimed or saved!', ephemeral: true });
-      }
+      if (isProcessed) return interaction.reply({ content: 'This reward has already been claimed or saved!', ephemeral: true });
       await sbMarkProcessed(messageId);
       
       const balance = await sbGetBalance(interaction.user.id);
@@ -947,9 +864,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       
       const messageId = interaction.message.id;
       const isProcessed = await sbIsProcessed(messageId);
-      if (isProcessed) {
-        return interaction.reply({ content: 'This reward has already been claimed or saved!', ephemeral: true });
-      }
+      if (isProcessed) return interaction.reply({ content: 'This reward has already been claimed or saved!', ephemeral: true });
       await sbMarkProcessed(messageId);
       
       const balance = await sbGetBalance(interaction.user.id);
@@ -966,21 +881,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const balance = await sbGetBalance(interaction.user.id);
       const totalMoney = balance ? balance.money : 0;
       if (totalMoney <= 0) return interaction.reply({ content: 'You have no balance to cash out.', ephemeral: true });
-
-      const modal = new ModalBuilder()
-        .setCustomId('cashout_amount_modal')
-        .setTitle('Cash Out');
-
-      const amountInput = new TextInputBuilder()
-        .setCustomId('cashout_amount')
-        .setLabel(`How much do you want to cash out? (Max: ${totalMoney}M)`)
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('e.g. 25')
-        .setMaxLength(10)
-        .setRequired(true);
-
+      const modal = new ModalBuilder().setCustomId('cashout_amount_modal').setTitle('Cash Out');
+      const amountInput = new TextInputBuilder().setCustomId('cashout_amount').setLabel(`How much do you want to cash out? (Max: ${totalMoney}M)`).setStyle(TextInputStyle.Short).setPlaceholder('e.g. 25').setMaxLength(10).setRequired(true);
       modal.addComponents(new ActionRowBuilder().addComponents(amountInput));
-
       await interaction.showModal(modal);
     }
 
@@ -989,29 +892,26 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const totalInvites = balance ? balance.invites : 0;
       const totalBoosts = balance ? balance.boosts : 0;
       const totalMoney = balance ? balance.money : 0;
-      const balanceEmbed = new EmbedBuilder()
-        .setTitle('📊 **Your Balance**')
-        .setDescription(
-          `💌 **Saved Invites:** ${totalInvites}\n` +
-          `🚀 **Saved Boosts:** ${totalBoosts}\n\n` +
-          `💰 **SAVED BALANCE - ${totalMoney}M**`
-        )
-        .setColor(0x9B59B6)
-        .setFooter({ text: BOT_NAME })
-        .setTimestamp();
+      const balanceEmbed = new EmbedBuilder().setTitle('📊 **Your Balance**').setDescription(`💌 **Saved Invites:** ${totalInvites}\n🚀 **Saved Boosts:** ${totalBoosts}\n\n💰 **SAVED BALANCE - ${totalMoney}M**`).setColor(0x9B59B6).setFooter({ text: BOT_NAME }).setTimestamp();
       await interaction.reply({ embeds: [balanceEmbed], ephemeral: true });
     }
 
     if (interaction.customId === 'lb_invite_position') {
-      await interaction.reply({ content: 'Leaderboard positions are temporarily unavailable.', ephemeral: true });
+      const rank = await getUserRank(interaction.user.id, 'invite');
+      if (!rank) return interaction.reply({ content: 'You have no invites yet.', ephemeral: true });
+      await interaction.reply({ content: `📊 **Your Position in Invites:** #${rank.position}\n💌 **Total Invites:** ${rank.value}`, ephemeral: true });
     }
 
     if (interaction.customId === 'lb_boost_position') {
-      await interaction.reply({ content: 'Leaderboard positions are temporarily unavailable.', ephemeral: true });
+      const rank = await getUserRank(interaction.user.id, 'boost');
+      if (!rank) return interaction.reply({ content: 'You have no boosts yet.', ephemeral: true });
+      await interaction.reply({ content: `📊 **Your Position in Boosts:** #${rank.position}\n🚀 **Total Boosts:** ${rank.value}`, ephemeral: true });
     }
 
     if (interaction.customId === 'lb_money_position') {
-      await interaction.reply({ content: 'Leaderboard positions are temporarily unavailable.', ephemeral: true });
+      const rank = await getUserRank(interaction.user.id, 'money');
+      if (!rank || rank.value === 0) return interaction.reply({ content: 'You have no balance yet.', ephemeral: true });
+      await interaction.reply({ content: `📊 **Your Position in Money:** #${rank.position}\n💰 **Balance:** ${rank.value}M`, ephemeral: true });
     }
 
     if (interaction.customId === 'appeal_button') {
@@ -1059,21 +959,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.customId === 'cashout_amount_modal') {
       const amountStr = interaction.fields.getTextInputValue('cashout_amount');
       const amount = parseInt(amountStr);
-      
-      if (isNaN(amount) || amount <= 0) {
-        return interaction.reply({ content: 'Please enter a valid number.', ephemeral: true });
-      }
-      
+      if (isNaN(amount) || amount <= 0) return interaction.reply({ content: 'Please enter a valid number.', ephemeral: true });
       const balance = await sbGetBalance(interaction.user.id);
       const currentMoney = balance ? balance.money : 0;
-      if (amount > currentMoney) {
-        return interaction.reply({ content: `You only have ${currentMoney}M. Please enter a smaller amount.`, ephemeral: true });
-      }
-      
+      if (amount > currentMoney) return interaction.reply({ content: `You only have ${currentMoney}M. Please enter a smaller amount.`, ephemeral: true });
       const currentInvites = balance ? balance.invites : 0;
       const currentBoosts = balance ? balance.boosts : 0;
       await sbUpdateBalance(interaction.user.id, currentInvites, currentBoosts, currentMoney - amount);
-      
       const extraMessage = `💰 **CASH OUT**\n<@${interaction.user.id}> wants to cash out **${amount}M**.\n💌 Saved Invites: ${currentInvites}\n🚀 Saved Boosts: ${currentBoosts}\n💰 **Remaining Balance:** ${currentMoney - amount}M`;
       await createTicket(interaction, 'invite-boost', extraMessage);
     }
@@ -1243,8 +1135,23 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.reply({ content: `Removed ${amount}M from ${user.tag}. New balance: **${newMoney}M**`, ephemeral: true });
     }
 
+    if (commandName === 'balcheck') {
+      if (interaction.user.id !== OWNER_ID) return interaction.reply({ content: 'Only the owner can use this command!', ephemeral: true });
+      const user = interaction.options.getUser('user');
+      const balance = await sbGetBalance(user.id);
+      const invites = balance ? balance.invites : 0;
+      const boosts = balance ? balance.boosts : 0;
+      const money = balance ? balance.money : 0;
+      const embed = new EmbedBuilder().setTitle(`📊 ${user.tag}'s Balance`).setDescription(`💌 **Invites:** ${invites}\n🚀 **Boosts:** ${boosts}\n💰 **Money:** ${money}M`).setColor(0x9B59B6).setFooter({ text: BOT_NAME }).setTimestamp();
+      await interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
     if (commandName === 'lb') {
-      await interaction.reply({ content: 'Leaderboard positions are temporarily unavailable. Please check back later.', ephemeral: true });
+      const type = interaction.options.getString('type');
+      const rank = await getUserRank(interaction.user.id, type);
+      if (!rank || rank.value === 0) return interaction.reply({ content: `You have no ${type === 'money' ? 'balance' : type + 's'} yet.`, ephemeral: true });
+      const typeLabel = type === 'invite' ? 'Invites' : type === 'boost' ? 'Boosts' : 'Money';
+      await interaction.reply({ content: `📊 **Your Position in ${typeLabel}:** #${rank.position}\n${type === 'money' ? '💰 **Balance:** ' + rank.value + 'M' : (type === 'invite' ? '💌 **Total Invites:** ' + rank.value : '🚀 **Total Boosts:** ' + rank.value)}`, ephemeral: true });
     }
   }
 });
