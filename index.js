@@ -58,6 +58,7 @@ const RULES_CHANNEL_ID = '1539693023061876806';
 const PRICES_CHANNEL_ID = '1539697766257659954';
 const MEDIA_REQUIREMENTS_CHANNEL_ID = '1539693647443001454';
 const REWARDS_INFO_CHANNEL_ID = '1539999315307667456';
+const LEADERBOARD_CHANNEL_ID = '1544673976226414613';
 
 const SERVER_INVITE = 'https://discord.gg/pingpongshangout';
 const BOT_NAME = "PingPong's Hangout Manager";
@@ -168,6 +169,37 @@ const savedBoosts = new Map();
 
 function isStaff(member) {
   return STAFF_ROLE_IDS.some(roleId => member.roles.cache.has(roleId));
+}
+
+function getInviteLeaderboard() {
+  const sorted = [...savedInvites.entries()].sort((a, b) => b[1] - a[1]);
+  return sorted.slice(0, 5);
+}
+
+function getBoostLeaderboard() {
+  const sorted = [...savedBoosts.entries()].sort((a, b) => b[1] - a[1]);
+  return sorted.slice(0, 5);
+}
+
+function getMoneyLeaderboard() {
+  const sorted = [...userBalances.entries()].sort((a, b) => b[1] - a[1]);
+  return sorted.slice(0, 5);
+}
+
+function getUserPosition(userId, type) {
+  let sorted;
+  if (type === 'invite') sorted = [...savedInvites.entries()].sort((a, b) => b[1] - a[1]);
+  else if (type === 'boost') sorted = [...savedBoosts.entries()].sort((a, b) => b[1] - a[1]);
+  else sorted = [...userBalances.entries()].sort((a, b) => b[1] - a[1]);
+  
+  const index = sorted.findIndex(([id]) => id === userId);
+  return index === -1 ? null : index + 1;
+}
+
+function getUserValue(userId, type) {
+  if (type === 'invite') return savedInvites.get(userId) || 0;
+  if (type === 'boost') return savedBoosts.get(userId) || 0;
+  return userBalances.get(userId) || 0;
 }
 
 async function getTicketCategory(guild) {
@@ -589,6 +621,63 @@ client.once(Events.ClientReady, async (c) => {
     }
   } catch (error) {}
 
+  // Leaderboard panels
+  try {
+    const lbChannel = c.channels.cache.get(LEADERBOARD_CHANNEL_ID);
+    if (lbChannel) {
+      // Invite Leaderboard
+      const inviteEmbed = new EmbedBuilder()
+        .setTitle('💌 **TOP 5 INVITES**')
+        .setDescription('Loading leaderboard...')
+        .setColor(0x3498DB)
+        .setFooter({ text: BOT_NAME })
+        .setTimestamp();
+      
+      const invitePositionButton = new ButtonBuilder()
+        .setCustomId('lb_invite_position')
+        .setLabel('My Position')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('📊');
+      
+      const inviteRow = new ActionRowBuilder().addComponents(invitePositionButton);
+      await lbChannel.send({ embeds: [inviteEmbed], components: [inviteRow] });
+
+      // Boost Leaderboard
+      const boostEmbed = new EmbedBuilder()
+        .setTitle('🚀 **TOP 5 BOOSTS**')
+        .setDescription('Loading leaderboard...')
+        .setColor(0xE74C3C)
+        .setFooter({ text: BOT_NAME })
+        .setTimestamp();
+      
+      const boostPositionButton = new ButtonBuilder()
+        .setCustomId('lb_boost_position')
+        .setLabel('My Position')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('📊');
+      
+      const boostRow = new ActionRowBuilder().addComponents(boostPositionButton);
+      await lbChannel.send({ embeds: [boostEmbed], components: [boostRow] });
+
+      // Money Leaderboard
+      const moneyEmbed = new EmbedBuilder()
+        .setTitle('💰 **TOP 5 MONEY**')
+        .setDescription('Loading leaderboard...')
+        .setColor(0xF1C40F)
+        .setFooter({ text: BOT_NAME })
+        .setTimestamp();
+      
+      const moneyPositionButton = new ButtonBuilder()
+        .setCustomId('lb_money_position')
+        .setLabel('My Position')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('📊');
+      
+      const moneyRow = new ActionRowBuilder().addComponents(moneyPositionButton);
+      await lbChannel.send({ embeds: [moneyEmbed], components: [moneyRow] });
+    }
+  } catch (error) {}
+
   const commands = [
     new SlashCommandBuilder().setName('ticket').setDescription('Create a ticket panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
     new SlashCommandBuilder().setName('suggest').setDescription('Create a suggestion panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
@@ -627,7 +716,14 @@ client.once(Events.ClientReady, async (c) => {
       .addIntegerOption(opt => opt.setName('amount').setDescription('Amount in M').setRequired(true)),
     new SlashCommandBuilder().setName('balremove').setDescription('Remove money (M) from a user').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .addUserOption(opt => opt.setName('user').setDescription('User to remove money from').setRequired(true))
-      .addIntegerOption(opt => opt.setName('amount').setDescription('Amount in M').setRequired(true))
+      .addIntegerOption(opt => opt.setName('amount').setDescription('Amount in M').setRequired(true)),
+    new SlashCommandBuilder().setName('lb').setDescription('Show your position in leaderboards')
+      .addStringOption(opt => opt.setName('type').setDescription('Leaderboard type').setRequired(true)
+        .addChoices(
+          { name: 'Invites', value: 'invite' },
+          { name: 'Boosts', value: 'boost' },
+          { name: 'Money', value: 'money' }
+        ))
   ];
 
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
@@ -763,6 +859,37 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setFooter({ text: BOT_NAME })
         .setTimestamp();
       await interaction.reply({ embeds: [balanceEmbed], ephemeral: true });
+    }
+
+    // Leaderboard position buttons
+    if (interaction.customId === 'lb_invite_position') {
+      const position = getUserPosition(interaction.user.id, 'invite');
+      const value = getUserValue(interaction.user.id, 'invite');
+      if (position === null) {
+        await interaction.reply({ content: 'You have no invites yet.', ephemeral: true });
+      } else {
+        await interaction.reply({ content: `📊 **Your Position in Invites:** #${position}\n💌 **Total Invites:** ${value}`, ephemeral: true });
+      }
+    }
+
+    if (interaction.customId === 'lb_boost_position') {
+      const position = getUserPosition(interaction.user.id, 'boost');
+      const value = getUserValue(interaction.user.id, 'boost');
+      if (position === null) {
+        await interaction.reply({ content: 'You have no boosts yet.', ephemeral: true });
+      } else {
+        await interaction.reply({ content: `📊 **Your Position in Boosts:** #${position}\n🚀 **Total Boosts:** ${value}`, ephemeral: true });
+      }
+    }
+
+    if (interaction.customId === 'lb_money_position') {
+      const position = getUserPosition(interaction.user.id, 'money');
+      const value = getUserValue(interaction.user.id, 'money');
+      if (position === null || value === 0) {
+        await interaction.reply({ content: 'You have no balance yet.', ephemeral: true });
+      } else {
+        await interaction.reply({ content: `📊 **Your Position in Money:** #${position}\n💰 **Balance:** ${value}M`, ephemeral: true });
+      }
     }
 
     if (interaction.customId === 'appeal_button') {
@@ -986,6 +1113,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const newBalance = Math.max(0, current - amount);
       userBalances.set(user.id, newBalance);
       await interaction.reply({ content: `Removed ${amount}M from ${user.tag}. New balance: **${newBalance}M**`, ephemeral: true });
+    }
+
+    if (commandName === 'lb') {
+      const type = interaction.options.getString('type');
+      const position = getUserPosition(interaction.user.id, type);
+      const value = getUserValue(interaction.user.id, type);
+      
+      if (position === null || value === 0) {
+        return interaction.reply({ content: `You have no ${type === 'money' ? 'balance' : type + 's'} yet.`, ephemeral: true });
+      }
+      
+      const typeLabel = type === 'invite' ? 'Invites' : type === 'boost' ? 'Boosts' : 'Money';
+      await interaction.reply({ content: `📊 **Your Position in ${typeLabel}:** #${position}\n${type === 'money' ? '💰 **Balance:** ' + value + 'M' : (type === 'invite' ? '💌 **Total Invites:** ' + value : '🚀 **Total Boosts:** ' + value)}`, ephemeral: true });
     }
   }
 });
