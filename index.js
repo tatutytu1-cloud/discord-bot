@@ -172,6 +172,39 @@ async function sbUpdateBalance(userId, invites, boosts, money) {
   }
 }
 
+async function sbIsProcessed(messageId) {
+  try {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/processed_rewards?message_id=eq.${messageId}&select=*`, {
+      method: 'GET',
+      headers: {
+        'apikey': SUPABASE_SERVICE_ROLE_KEY,
+        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+      }
+    });
+    const data = await response.json();
+    return data && data.length > 0;
+  } catch (error) {
+    console.error('Supabase processed check error:', error);
+    return false;
+  }
+}
+
+async function sbMarkProcessed(messageId) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/processed_rewards`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_SERVICE_ROLE_KEY,
+        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ message_id: messageId })
+    });
+  } catch (error) {
+    console.error('Supabase mark processed error:', error);
+  }
+}
+
 // ==================== TICKET TYPES ====================
 const TICKET_TYPES = {
   'purchase': 'purchase',
@@ -221,7 +254,6 @@ const giveaways = new Map();
 const inviteCache = new Map();
 const claimedTickets = new Map();
 const ticketCreatedAt = new Map();
-const processedRewards = new Map();
 
 function isStaff(member) {
   return STAFF_ROLE_IDS.some(roleId => member.roles.cache.has(roleId));
@@ -820,10 +852,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (interaction.user.id !== inviterId) return interaction.reply({ content: 'This claim button is only for the inviter!', ephemeral: true });
       
       const messageId = interaction.message.id;
-      if (processedRewards.has(messageId)) {
+      const isProcessed = await sbIsProcessed(messageId);
+      if (isProcessed) {
         return interaction.reply({ content: 'This reward has already been claimed or saved!', ephemeral: true });
       }
-      processedRewards.set(messageId, true);
+      await sbMarkProcessed(messageId);
       
       const balance = await sbGetBalance(interaction.user.id);
       const totalInvites = balance ? balance.invites : 0;
@@ -838,10 +871,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (interaction.user.id !== inviterId) return interaction.reply({ content: 'This button is only for the inviter!', ephemeral: true });
       
       const messageId = interaction.message.id;
-      if (processedRewards.has(messageId)) {
+      const isProcessed = await sbIsProcessed(messageId);
+      if (isProcessed) {
         return interaction.reply({ content: 'This reward has already been claimed or saved!', ephemeral: true });
       }
-      processedRewards.set(messageId, true);
+      await sbMarkProcessed(messageId);
       
       const balance = await sbGetBalance(interaction.user.id);
       const currentInvites = balance ? balance.invites : 0;
