@@ -3,6 +3,7 @@
 // Made by pingpongble
 
 require('dotenv').config();
+const fs = require('fs');
 const {
   Client,
   GatewayIntentBits,
@@ -167,8 +168,34 @@ const userBalances = new Map();
 const savedInvites = new Map();
 const savedBoosts = new Map();
 
-function isStaff(member) {
-  return STAFF_ROLE_IDS.some(roleId => member.roles.cache.has(roleId));
+// ==================== DATA PERSISTENCE ====================
+const DATA_FILE = './data.json';
+
+function saveData() {
+  const data = {
+    userBalances: Object.fromEntries(userBalances),
+    savedInvites: Object.fromEntries(savedInvites),
+    savedBoosts: Object.fromEntries(savedBoosts)
+  };
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+  } catch (error) {
+    console.error('Error saving data:', error);
+  }
+}
+
+function loadData() {
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+      if (data.userBalances) Object.entries(data.userBalances).forEach(([k, v]) => userBalances.set(k, v));
+      if (data.savedInvites) Object.entries(data.savedInvites).forEach(([k, v]) => savedInvites.set(k, v));
+      if (data.savedBoosts) Object.entries(data.savedBoosts).forEach(([k, v]) => savedBoosts.set(k, v));
+      console.log('✅ Data loaded from file');
+    }
+  } catch (error) {
+    console.error('Error loading data:', error);
+  }
 }
 
 function getInviteLeaderboard() {
@@ -200,6 +227,10 @@ function getUserValue(userId, type) {
   if (type === 'invite') return savedInvites.get(userId) || 0;
   if (type === 'boost') return savedBoosts.get(userId) || 0;
   return userBalances.get(userId) || 0;
+}
+
+function isStaff(member) {
+  return STAFF_ROLE_IDS.some(roleId => member.roles.cache.has(roleId));
 }
 
 async function getTicketCategory(guild) {
@@ -475,6 +506,7 @@ client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
     
     const currentBalance = userBalances.get(newMember.id) || 0;
     userBalances.set(newMember.id, currentBalance + BOOST_REWARD_MONEY);
+    saveData();
     
     console.log(`✅ ${newMember.user.tag} started boosting! Boosts: ${currentBoosts + 1}, Balance: ${currentBalance + BOOST_REWARD_MONEY}M`);
   }
@@ -542,6 +574,9 @@ client.on(Events.MessageCreate, async (message) => {
 // ==================== EVENT: CLIENT READY ====================
 client.once(Events.ClientReady, async (c) => {
   console.log(`✅ Bot logged in as ${c.user.tag}`);
+
+  // Load saved data
+  loadData();
 
   await c.user.setUsername(BOT_NAME).catch(() => {});
   await c.user.setActivity("PingPong's Hangout", { type: 3 });
@@ -625,56 +660,94 @@ client.once(Events.ClientReady, async (c) => {
   try {
     const lbChannel = c.channels.cache.get(LEADERBOARD_CHANNEL_ID);
     if (lbChannel) {
-      // Invite Leaderboard
       const inviteEmbed = new EmbedBuilder()
         .setTitle('💌 **TOP 5 INVITES**')
         .setDescription('Loading leaderboard...')
         .setColor(0x3498DB)
         .setFooter({ text: BOT_NAME })
         .setTimestamp();
-      
       const invitePositionButton = new ButtonBuilder()
         .setCustomId('lb_invite_position')
         .setLabel('My Position')
         .setStyle(ButtonStyle.Primary)
         .setEmoji('📊');
-      
       const inviteRow = new ActionRowBuilder().addComponents(invitePositionButton);
       await lbChannel.send({ embeds: [inviteEmbed], components: [inviteRow] });
 
-      // Boost Leaderboard
       const boostEmbed = new EmbedBuilder()
         .setTitle('🚀 **TOP 5 BOOSTS**')
         .setDescription('Loading leaderboard...')
         .setColor(0xE74C3C)
         .setFooter({ text: BOT_NAME })
         .setTimestamp();
-      
       const boostPositionButton = new ButtonBuilder()
         .setCustomId('lb_boost_position')
         .setLabel('My Position')
         .setStyle(ButtonStyle.Primary)
         .setEmoji('📊');
-      
       const boostRow = new ActionRowBuilder().addComponents(boostPositionButton);
       await lbChannel.send({ embeds: [boostEmbed], components: [boostRow] });
 
-      // Money Leaderboard
       const moneyEmbed = new EmbedBuilder()
         .setTitle('💰 **TOP 5 MONEY**')
         .setDescription('Loading leaderboard...')
         .setColor(0xF1C40F)
         .setFooter({ text: BOT_NAME })
         .setTimestamp();
-      
       const moneyPositionButton = new ButtonBuilder()
         .setCustomId('lb_money_position')
         .setLabel('My Position')
         .setStyle(ButtonStyle.Primary)
         .setEmoji('📊');
-      
       const moneyRow = new ActionRowBuilder().addComponents(moneyPositionButton);
       await lbChannel.send({ embeds: [moneyEmbed], components: [moneyRow] });
+
+      // Refresh leaderboards every hour
+      setInterval(async () => {
+        try {
+          const messages = await lbChannel.messages.fetch({ limit: 10 });
+          
+          // Update invite leaderboard
+          const inviteLB = getInviteLeaderboard();
+          let inviteDesc = '';
+          if (inviteLB.length === 0) inviteDesc = 'No invites yet.';
+          else inviteLB.forEach(([userId, count], index) => { inviteDesc += `**${index + 1}.** <@${userId}> - ${count} invite(s)\n`; });
+          const inviteMsg = messages.find(m => m.embeds[0]?.title?.includes('TOP 5 INVITES'));
+          if (inviteMsg) {
+            const embed = EmbedBuilder.from(inviteMsg.embeds[0]);
+            embed.setDescription(inviteDesc);
+            await inviteMsg.edit({ embeds: [embed] });
+          }
+
+          // Update boost leaderboard
+          const boostLB = getBoostLeaderboard();
+          let boostDesc = '';
+          if (boostLB.length === 0) boostDesc = 'No boosts yet.';
+          else boostLB.forEach(([userId, count], index) => { boostDesc += `**${index + 1}.** <@${userId}> - ${count} boost(s)\n`; });
+          const boostMsg = messages.find(m => m.embeds[0]?.title?.includes('TOP 5 BOOSTS'));
+          if (boostMsg) {
+            const embed = EmbedBuilder.from(boostMsg.embeds[0]);
+            embed.setDescription(boostDesc);
+            await boostMsg.edit({ embeds: [embed] });
+          }
+
+          // Update money leaderboard
+          const moneyLB = getMoneyLeaderboard();
+          let moneyDesc = '';
+          if (moneyLB.length === 0) moneyDesc = 'No money yet.';
+          else moneyLB.forEach(([userId, balance], index) => { moneyDesc += `**${index + 1}.** <@${userId}> - ${balance}M\n`; });
+          const moneyMsg = messages.find(m => m.embeds[0]?.title?.includes('TOP 5 MONEY'));
+          if (moneyMsg) {
+            const embed = EmbedBuilder.from(moneyMsg.embeds[0]);
+            embed.setDescription(moneyDesc);
+            await moneyMsg.edit({ embeds: [embed] });
+          }
+
+          console.log('✅ Leaderboards refreshed');
+        } catch (error) {
+          console.error('Error refreshing leaderboard:', error);
+        }
+      }, 60 * 60 * 1000);
     }
   } catch (error) {}
 
@@ -818,6 +891,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       
       const currentBalance = userBalances.get(interaction.user.id) || 0;
       userBalances.set(interaction.user.id, currentBalance + INVITE_REWARD_MONEY);
+      saveData();
       
       const totalBalance = userBalances.get(interaction.user.id) || 0;
       await interaction.reply({ content: `You saved your invite reward! Saved invites: **${currentInvites + 1}**\n💰 **Saved Balance:** ${totalBalance}M`, ephemeral: true });
@@ -861,7 +935,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.reply({ embeds: [balanceEmbed], ephemeral: true });
     }
 
-    // Leaderboard position buttons
     if (interaction.customId === 'lb_invite_position') {
       const position = getUserPosition(interaction.user.id, 'invite');
       const value = getUserValue(interaction.user.id, 'invite');
@@ -948,6 +1021,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
       
       userBalances.set(interaction.user.id, currentBalance - amount);
+      saveData();
       
       const totalInvites = savedInvites.get(interaction.user.id) || 0;
       const totalBoosts = savedBoosts.get(interaction.user.id) || 0;
@@ -1102,6 +1176,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (amount <= 0) return interaction.reply({ content: 'Amount must be positive.', ephemeral: true });
       const current = userBalances.get(user.id) || 0;
       userBalances.set(user.id, current + amount);
+      saveData();
       await interaction.reply({ content: `Added ${amount}M to ${user.tag}. New balance: **${current + amount}M**`, ephemeral: true });
     }
 
@@ -1112,6 +1187,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const current = userBalances.get(user.id) || 0;
       const newBalance = Math.max(0, current - amount);
       userBalances.set(user.id, newBalance);
+      saveData();
       await interaction.reply({ content: `Removed ${amount}M from ${user.tag}. New balance: **${newBalance}M**`, ephemeral: true });
     }
 
