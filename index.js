@@ -163,6 +163,8 @@ const inviteCache = new Map();
 const claimedTickets = new Map();
 const ticketCreatedAt = new Map();
 const userBalances = new Map(); // Map<userId, money in M>
+const savedInvites = new Map(); // Map<userId, count>
+const savedBoosts = new Map(); // Map<userId, count>
 
 function isStaff(member) {
   return STAFF_ROLE_IDS.some(roleId => member.roles.cache.has(roleId));
@@ -437,9 +439,9 @@ client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
   const newBoosting = Boolean(newMember.premiumSince);
 
   if (!oldBoosting && newBoosting) {
-    const current = userBalances.get(newMember.id) || 0;
-    userBalances.set(newMember.id, current + BOOST_REWARD_MONEY);
-    console.log(`✅ ${newMember.user.tag} started boosting! Added ${BOOST_REWARD_MONEY}M. New balance: ${current + BOOST_REWARD_MONEY}M`);
+    const current = savedBoosts.get(newMember.id) || 0;
+    savedBoosts.set(newMember.id, current + 1);
+    console.log(`✅ ${newMember.user.tag} started boosting! Total boosts saved: ${current + 1}`);
   }
 });
 
@@ -547,7 +549,7 @@ client.once(Events.ClientReady, async (c) => {
   try {
     const rewardsChannel = c.channels.cache.get(REWARDS_INFO_CHANNEL_ID);
     if (rewardsChannel) {
-      const embed = new EmbedBuilder().setTitle('🎁 **HOW TO EARN REWARDS** 🎁').setDescription('**You can earn saved rewards in two ways:**\n\n💌 **Invite Someone** – When a user joins through YOUR invite link, you get 1 Invite Reward (5M).\n\n🚀 **Boost The Server** – When you boost our server, you get 1 Boost Reward (20M).\n\n**Saving Your Rewards:**\n\nWhen someone joins through your link, you\'ll see two buttons:\n✅ **CLAIM** – Opens a ticket immediately to claim your reward.\n💾 **SAVE IT** – Saves your reward to your balance for later.\n\n💡 *Pro Tip: Save up multiple rewards and cash them out all at once!*\n\n**Checking Your Balance:**\n\nHead over to the Cashout Panel channel and click **CHECK BALANCE**.\n\nYou\'ll see your total **Money (M)**.\n\n**Cashing Out:**\n\nWhen you\'re ready to claim your rewards, go to the Cashout Panel and click **CASH OUT**.\n\nA ticket will be opened with your total balance for staff to process.\n\n**Why Save Your Rewards?**\n\n💎 **Bigger payouts** – Cash out multiple rewards at once\n📊 **Better organization** – Keep track of everything in one place\n⚡ **Flexibility** – Claim when YOU want, not when you earn it\n\n**Need Help?**\n\nIf you have any questions, open a **Support Ticket** and our Staff Team will help you out!\n\n🎉 **Happy Earning!** 🎉').setColor(0x9B59B6).setFooter({ text: BOT_NAME }).setTimestamp();
+      const embed = new EmbedBuilder().setTitle('🎁 **HOW TO EARN REWARDS** 🎁').setDescription('**You can earn saved rewards in two ways:**\n\n💌 **Invite Someone** – When a user joins through YOUR invite link, you get 1 Invite Reward (5M).\n\n🚀 **Boost The Server** – When you boost our server, you get 1 Boost Reward (20M).\n\n**Saving Your Rewards:**\n\nWhen someone joins through your link, you\'ll see two buttons:\n✅ **CLAIM** – Opens a ticket immediately to claim your reward.\n💾 **SAVE IT** – Saves your reward to your balance for later.\n\n💡 *Pro Tip: Save up multiple rewards and cash them out all at once!*\n\n**Checking Your Balance:**\n\nHead over to the Cashout Panel channel and click **CHECK BALANCE**.\n\nYou\'ll see your saved invites, boosts and total balance.\n\n**Cashing Out:**\n\nWhen you\'re ready to claim your rewards, go to the Cashout Panel and click **CASH OUT**.\n\nA ticket will be opened with your total balance for staff to process.\n\n🎉 **Happy Earning!** 🎉').setColor(0x9B59B6).setFooter({ text: BOT_NAME }).setTimestamp();
       await rewardsChannel.send({ embeds: [embed] });
     }
   } catch (error) {}
@@ -577,7 +579,7 @@ client.once(Events.ClientReady, async (c) => {
   try {
     const cashoutChannel = c.channels.cache.get(CASHOUT_PANEL_CHANNEL_ID);
     if (cashoutChannel) {
-      const cashoutEmbed = new EmbedBuilder().setTitle('💰 **REWARD CASHOUT** 💰').setDescription('✨ **Click the button below to check your balance or cash out!** ✨\n\n**Available actions:**\n🔄 **CASH OUT** – Opens a ticket with your total balance\n📊 **CHECK BALANCE** – Shows your current Money (M)\n\n🎉 *Good luck and thank you for supporting our community!* 🎉').setColor(0x9B59B6).setFooter({ text: BOT_NAME }).setTimestamp();
+      const cashoutEmbed = new EmbedBuilder().setTitle('💰 **REWARD CASHOUT** 💰').setDescription('✨ **Click the button below to check your balance or cash out!** ✨\n\n**Available actions:**\n🔄 **CASH OUT** – Opens a ticket with your total balance\n📊 **CHECK BALANCE** – Shows your saved invites, boosts and balance\n\n🎉 *Good luck and thank you for supporting our community!* 🎉').setColor(0x9B59B6).setFooter({ text: BOT_NAME }).setTimestamp();
       const cashoutButton = new ButtonBuilder().setCustomId('cashout_button').setLabel('CASH OUT').setStyle(ButtonStyle.Success).setEmoji('💰');
       const checkBalanceButton = new ButtonBuilder().setCustomId('check_balance_button').setLabel('CHECK BALANCE').setStyle(ButtonStyle.Primary).setEmoji('📊');
       const row = new ActionRowBuilder().addComponents(cashoutButton, checkBalanceButton);
@@ -702,33 +704,44 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.customId.startsWith('invite_reward_claim_')) {
       const inviterId = interaction.customId.replace('invite_reward_claim_', '');
       if (interaction.user.id !== inviterId) return interaction.reply({ content: 'This claim button is only for the inviter!', ephemeral: true });
-      // When claiming, open ticket with current balance
-      const balance = userBalances.get(interaction.user.id) || 0;
-      const extraMessage = `💌 **INVITE CLAIM**\n<@${interaction.user.id}> wants to claim their invite reward. Current balance: **${balance}M**`;
+      const totalInvites = savedInvites.get(interaction.user.id) || 0;
+      const totalBoosts = savedBoosts.get(interaction.user.id) || 0;
+      const totalBalance = totalInvites * INVITE_REWARD_MONEY + totalBoosts * BOOST_REWARD_MONEY;
+      const extraMessage = `💌 **INVITE CLAIM**\n<@${interaction.user.id}> wants to claim their invite reward.\n💌 Saved Invites: ${totalInvites}\n🚀 Saved Boosts: ${totalBoosts}\n💰 **Saved Balance:** ${totalBalance}M`;
       await createTicket(interaction, 'invite-boost', extraMessage);
     }
 
     if (interaction.customId.startsWith('invite_reward_save_')) {
       const inviterId = interaction.customId.replace('invite_reward_save_', '');
       if (interaction.user.id !== inviterId) return interaction.reply({ content: 'This button is only for the inviter!', ephemeral: true });
-      // Add invite reward to balance
-      const current = userBalances.get(interaction.user.id) || 0;
-      userBalances.set(interaction.user.id, current + INVITE_REWARD_MONEY);
-      await interaction.reply({ content: `You saved your invite reward! ${INVITE_REWARD_MONEY}M added to your balance. New balance: **${current + INVITE_REWARD_MONEY}M**`, ephemeral: true });
+      const current = savedInvites.get(interaction.user.id) || 0;
+      savedInvites.set(interaction.user.id, current + 1);
+      const totalInvites = savedInvites.get(interaction.user.id) || 0;
+      const totalBoosts = savedBoosts.get(interaction.user.id) || 0;
+      const totalBalance = totalInvites * INVITE_REWARD_MONEY + totalBoosts * BOOST_REWARD_MONEY;
+      await interaction.reply({ content: `You saved your invite reward! Saved invites: **${totalInvites}**\n💰 **Saved Balance:** ${totalBalance}M`, ephemeral: true });
     }
 
     if (interaction.customId === 'cashout_button') {
-      const balance = userBalances.get(interaction.user.id) || 0;
-      if (balance <= 0) return interaction.reply({ content: 'Your balance is 0M. Nothing to cash out.', ephemeral: true });
-      const extraMessage = `💰 **CASH OUT**\n<@${interaction.user.id}> wants to cash out their balance.\n**Total Balance:** ${balance}M`;
+      const totalInvites = savedInvites.get(interaction.user.id) || 0;
+      const totalBoosts = savedBoosts.get(interaction.user.id) || 0;
+      const totalBalance = totalInvites * INVITE_REWARD_MONEY + totalBoosts * BOOST_REWARD_MONEY;
+      if (totalBalance <= 0) return interaction.reply({ content: 'You have no saved rewards to cash out.', ephemeral: true });
+      const extraMessage = `💰 **CASH OUT**\n<@${interaction.user.id}> wants to cash out their saved rewards.\n💌 Saved Invites: ${totalInvites}\n🚀 Saved Boosts: ${totalBoosts}\n💰 **Total Value:** ${totalBalance}M`;
       await createTicket(interaction, 'invite-boost', extraMessage);
     }
 
     if (interaction.customId === 'check_balance_button') {
-      const balance = userBalances.get(interaction.user.id) || 0;
+      const totalInvites = savedInvites.get(interaction.user.id) || 0;
+      const totalBoosts = savedBoosts.get(interaction.user.id) || 0;
+      const totalBalance = totalInvites * INVITE_REWARD_MONEY + totalBoosts * BOOST_REWARD_MONEY;
       const balanceEmbed = new EmbedBuilder()
         .setTitle('📊 **Your Balance**')
-        .setDescription(`💰 **Money - ${balance}M**`)
+        .setDescription(
+          `💌 **Saved Invites:** ${totalInvites}\n` +
+          `🚀 **Saved Boosts:** ${totalBoosts}\n\n` +
+          `💰 **SAVED BALANCE - ${totalBalance}M**`
+        )
         .setColor(0x9B59B6)
         .setFooter({ text: BOT_NAME })
         .setTimestamp();
@@ -918,7 +931,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       try { await interaction.guild.members.unban(userId); await interaction.reply({ content: 'Unbanned!', ephemeral: true }); } catch (error) { await interaction.reply({ content: 'Could not unban.', ephemeral: true }); }
     }
 
-    // New balance commands
     if (commandName === 'baladd') {
       const user = interaction.options.getUser('user');
       const amount = interaction.options.getInteger('amount');
