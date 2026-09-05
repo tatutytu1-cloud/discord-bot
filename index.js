@@ -395,12 +395,7 @@ async function endQuickdrop(quickdropId) {
   }
 
   const winner = participants[Math.floor(Math.random() * participants.length)];
-  const winnerEmbed = new EmbedBuilder()
-    .setTitle('⚡ Quickdrop Winner!')
-    .setDescription(`<@${winner}> You won the Quickdrop! Prize: **${prize}**`)
-    .setColor(0xFFD700)
-    .setTimestamp();
-
+  const winnerEmbed = new EmbedBuilder().setTitle('⚡ Quickdrop Winner!').setDescription(`<@${winner}> You won the Quickdrop! Prize: **${prize}**`).setColor(0xFFD700).setTimestamp();
   await channel.send({ embeds: [winnerEmbed] });
   quickdrops.delete(quickdropId);
 }
@@ -586,7 +581,7 @@ client.once(Events.ClientReady, async (c) => {
       .addStringOption(opt => opt.setName('prize').setDescription('Prize description').setRequired(true))
       .addStringOption(opt => opt.setName('description').setDescription('Giveaway description').setRequired(false))
       .addIntegerOption(opt => opt.setName('winners').setDescription('Number of winners').setRequired(false)),
-    new SlashCommandBuilder().setName('quickdrop').setDescription('Create a quickdrop (fast giveaway)').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    new SlashCommandBuilder().setName('quickdrop').setDescription('Create a quickdrop').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .addStringOption(opt => opt.setName('prize').setDescription('Prize description').setRequired(true))
       .addIntegerOption(opt => opt.setName('duration').setDescription('Duration in seconds').setRequired(true)),
     new SlashCommandBuilder().setName('embed').setDescription('Send an embed via webhook').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
@@ -677,9 +672,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     if (interaction.customId === 'legit_yes') {
-      if (legitVoters.has(interaction.user.id)) {
-        return interaction.reply({ content: 'You already voted!', ephemeral: true });
-      }
+      if (legitVoters.has(interaction.user.id)) return interaction.reply({ content: 'You already voted!', ephemeral: true });
       legitVoters.add(interaction.user.id);
       legitVotes++;
       await updateLegitPanel();
@@ -792,9 +785,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.customId === 'cashout_button') {
       const balance = await sbGetBalance(interaction.user.id);
       const totalMoney = balance ? balance.money : 0;
-      if (totalMoney < MIN_CASHOUT) {
-        return interaction.reply({ content: `❌ Minimum cashout is **${MIN_CASHOUT}M**. You only have **${totalMoney}M**.`, ephemeral: true });
-      }
+      if (totalMoney < MIN_CASHOUT) return interaction.reply({ content: `❌ Minimum cashout is **${MIN_CASHOUT}M**. You only have **${totalMoney}M**.`, ephemeral: true });
       const modal = new ModalBuilder().setCustomId('cashout_amount_modal').setTitle('Cash Out');
       const amountInput = new TextInputBuilder().setCustomId('cashout_amount').setLabel(`Amount to cash out (Min: ${MIN_CASHOUT}M, Max: ${totalMoney}M)`).setStyle(TextInputStyle.Short).setPlaceholder('e.g. 25').setMaxLength(10).setRequired(true);
       modal.addComponents(new ActionRowBuilder().addComponents(amountInput));
