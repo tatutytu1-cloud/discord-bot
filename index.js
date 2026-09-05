@@ -58,6 +58,7 @@ const WELCOME_GOODBYE_CHANNEL_ID = '1540717176913399829';
 const INVITE_TRACKING_CHANNEL_ID = '1539999179609481366';
 const APPEALS_LOGS_CHANNEL_ID = '1539969669811933204';
 const LEADERBOARD_CHANNEL_ID = '1544673976226414613';
+const LEGIT_CHANNEL_ID = '1541433515898441809';
 
 const SERVER_INVITE = 'https://discord.gg/pingpongshangout';
 const BOT_NAME = "PingPong's Hangout Manager";
@@ -69,7 +70,11 @@ const SIGHTENGINE_API_SECRET = 'JobAdkm7oXGYw3pz8DE2Hyz5UbCY2XxF';
 // Reward values
 const INVITE_REWARD_MONEY = 5;
 const BOOST_REWARD_MONEY = 20;
-const MIN_CASHOUT = 20; // Minimum cashout amount
+const MIN_CASHOUT = 20;
+
+// Legit votes
+let legitVotes = 0;
+let legitVoters = new Set();
 
 // ==================== BAD WORDS FILTER ====================
 const BAD_WORDS = [
@@ -189,17 +194,17 @@ async function getUserRank(userId, type) {
 // ==================== TICKET TYPES ====================
 const TICKET_TYPES = {
   'purchase': 'purchase', 'support': 'support', 'media': 'media',
-  'partnership': 'partnership', 'sponsor': 'sponsor', 'invite-boost': 'invite-boost', 'claim': 'claim'
+  'partnership': 'partnership', 'sponsor': 'sponsor', 'invite-boost': 'invite-boost', 'claim': 'claim', 'legit': 'legit'
 };
 
 const TICKET_EMOJIS = {
   'purchase': '💸', 'support': '🌐', 'media': '📸',
-  'partnership': '👥', 'sponsor': '💎', 'invite-boost': '🎁', 'claim': '🎉'
+  'partnership': '👥', 'sponsor': '💎', 'invite-boost': '🎁', 'claim': '🎉', 'legit': '🔍'
 };
 
 const TICKET_LABELS = {
   'purchase': 'Purchase', 'support': 'Support', 'media': 'Media',
-  'partnership': 'Partnership', 'sponsor': 'Sponsor', 'invite-boost': 'Invite/Boost Reward Claim', 'claim': 'Giveaway Claim'
+  'partnership': 'Partnership', 'sponsor': 'Sponsor', 'invite-boost': 'Invite/Boost Reward Claim', 'claim': 'Giveaway Claim', 'legit': 'Legit Proof'
 };
 
 // ==================== CLIENT SETUP ====================
@@ -508,6 +513,39 @@ async function updateStaffPanel(channelId) {
   } catch (error) {}
 }
 
+// ==================== ARE WE LEGIT PANEL ====================
+async function updateLegitPanel() {
+  try {
+    const channel = client.channels.cache.get(LEGIT_CHANNEL_ID);
+    if (!channel) return;
+
+    const embed = new EmbedBuilder()
+      .setTitle('🔍 **ARE WE LEGIT?** 🔍')
+      .setDescription(
+        '**Vote based on your experience with us!**\n\n' +
+        '✅ **YES** – Add +1 to our legitimacy score\n' +
+        '❌ **NO** – You must provide proof (otherwise ban)\n\n' +
+        `**Current Legit Votes:** ${legitVotes}`
+      )
+      .setColor(0x9B59B6)
+      .setFooter({ text: BOT_NAME })
+      .setTimestamp();
+
+    const yesButton = new ButtonBuilder().setCustomId('legit_yes').setLabel('✅').setStyle(ButtonStyle.Success);
+    const noButton = new ButtonBuilder().setCustomId('legit_no').setLabel('❌').setStyle(ButtonStyle.Danger);
+    const row = new ActionRowBuilder().addComponents(yesButton, noButton);
+
+    const messages = await channel.messages.fetch({ limit: 5 });
+    const existing = messages.find(m => m.embeds[0]?.title?.includes('ARE WE LEGIT'));
+
+    if (existing) {
+      await existing.edit({ embeds: [embed], components: [row] });
+    } else {
+      await channel.send({ embeds: [embed], components: [row] });
+    }
+  } catch (error) {}
+}
+
 // ==================== EVENT: CLIENT READY ====================
 client.once(Events.ClientReady, async (c) => {
   console.log(`✅ Bot logged in as ${c.user.tag}`);
@@ -529,6 +567,7 @@ client.once(Events.ClientReady, async (c) => {
     new SlashCommandBuilder().setName('staffstatus').setDescription('Create a staff status panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
     new SlashCommandBuilder().setName('cashoutpanel').setDescription('Create a cashout panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
     new SlashCommandBuilder().setName('rewardspanel').setDescription('Create a rewards info panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder().setName('legitpanel').setDescription('Create an Are We Legit panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
     new SlashCommandBuilder().setName('gcreate').setDescription('Create a giveaway').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .addStringOption(opt => opt.setName('name').setDescription('Giveaway name').setRequired(true))
       .addIntegerOption(opt => opt.setName('duration').setDescription('Duration in minutes').setRequired(true))
@@ -620,6 +659,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.customId === 'close_ticket') {
       if (!isStaff(interaction.member)) return interaction.reply({ content: 'Only staff can close tickets!', ephemeral: true });
       await closeTicket(interaction);
+    }
+
+    if (interaction.customId === 'legit_yes') {
+      if (legitVoters.has(interaction.user.id)) {
+        return interaction.reply({ content: 'You already voted!', ephemeral: true });
+      }
+      legitVoters.add(interaction.user.id);
+      legitVotes++;
+      await updateLegitPanel();
+      await interaction.reply({ content: 'Thank you for your vote!', ephemeral: true });
+    }
+
+    if (interaction.customId === 'legit_no') {
+      const extraMessage = `🔍 **LEGIT PROOF REQUIRED**\n<@${interaction.user.id}> voted that we are NOT legit.\n\n**They must provide proof in this ticket, otherwise they will be banned.**`;
+      await createTicket(interaction, 'legit', extraMessage);
     }
 
     if (interaction.customId.startsWith('enter_giveaway_')) {
@@ -847,9 +901,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const cashoutEmbed = new EmbedBuilder()
         .setTitle('💰 **REWARD CASHOUT** 💰')
         .setDescription('✨ **Click the button below to check your balance or cash out!** ✨\n\n**Available actions:**\n🔄 **CASH OUT** – Choose amount and open a ticket (Min: **20M**)\n📊 **CHECK BALANCE** – Shows your saved invites, boosts and balance\n\n🎉 *Good luck and thank you for supporting our community!* 🎉')
-        .setColor(0x9B59B6)
-        .setFooter({ text: BOT_NAME })
-        .setTimestamp();
+        .setColor(0x9B59B6).setFooter({ text: BOT_NAME }).setTimestamp();
       const cashoutButton = new ButtonBuilder().setCustomId('cashout_button').setLabel('CASH OUT').setStyle(ButtonStyle.Success).setEmoji('💰');
       const checkBalanceButton = new ButtonBuilder().setCustomId('check_balance_button').setLabel('CHECK BALANCE').setStyle(ButtonStyle.Primary).setEmoji('📊');
       const row = new ActionRowBuilder().addComponents(cashoutButton, checkBalanceButton);
@@ -861,11 +913,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const rewardsEmbed = new EmbedBuilder()
         .setTitle('🎁 **HOW TO EARN REWARDS** 🎁')
         .setDescription('**You can earn saved rewards in two ways:**\n\n💌 **Invite Someone** – When a user joins through YOUR invite link, you get 1 Invite Reward (5M).\n\n🚀 **Boost The Server** – When you boost our server, you get 1 Boost Reward (20M).\n\n**Saving Your Rewards:**\n\nWhen someone joins through your link, you\'ll see two buttons:\n✅ **CLAIM** – Opens a ticket immediately to claim your reward.\n💾 **SAVE IT** – Saves your reward to your balance for later.\n\n⚠️ **Important:** Buttons will unlock **after 3 hours** from when the user joined. The user must stay on the server.\n\n💡 *Pro Tip: Save up multiple rewards and cash them out all at once!*\n\n**Checking Your Balance:**\n\nHead over to the Cashout Panel channel and click **CHECK BALANCE**.\n\nYou\'ll see your saved invites, boosts and total balance.\n\n**Cashing Out:**\n\nWhen you\'re ready to claim your rewards, go to the Cashout Panel and click **CASH OUT**.\n\nMinimum cashout: **20M**\n\nA ticket will be opened with your total balance for staff to process.\n\n🎉 **Happy Earning!** 🎉')
-        .setColor(0x9B59B6)
-        .setFooter({ text: BOT_NAME })
-        .setTimestamp();
+        .setColor(0x9B59B6).setFooter({ text: BOT_NAME }).setTimestamp();
       await interaction.channel.send({ embeds: [rewardsEmbed] });
       await interaction.reply({ content: 'Rewards panel created!', ephemeral: true });
+    }
+
+    if (commandName === 'legitpanel') {
+      await updateLegitPanel();
+      await interaction.reply({ content: 'Legit panel created!', ephemeral: true });
     }
 
     if (commandName === 'gcreate') {
