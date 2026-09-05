@@ -53,19 +53,11 @@ const OWNER_ID = '1215207828713906222';
 
 const TICKET_LOGS_CHANNEL_ID = '1539942205475528734';
 const GIVEAWAY_CHANNEL_ID = '1539694123353772183';
-const TICKET_PANEL_CHANNEL_ID = '1539692765716283403';
-const SUGGESTION_PANEL_CHANNEL_ID = '1539949080493694986';
 const SUGGESTIONS_LOGS_CHANNEL_ID = '1539969669811933204';
 const WELCOME_GOODBYE_CHANNEL_ID = '1540717176913399829';
 const INVITE_TRACKING_CHANNEL_ID = '1539999179609481366';
 const APPEALS_LOGS_CHANNEL_ID = '1539969669811933204';
-const CASHOUT_PANEL_CHANNEL_ID = '1544425577577058444';
-const RULES_CHANNEL_ID = '1539693023061876806';
-const PRICES_CHANNEL_ID = '1539697766257659954';
-const MEDIA_REQUIREMENTS_CHANNEL_ID = '1539693647443001454';
-const REWARDS_INFO_CHANNEL_ID = '1539999315307667456';
 const LEADERBOARD_CHANNEL_ID = '1544673976226414613';
-const STAFF_STATUS_CHANNEL_ID = '1542625657652121620';
 
 const SERVER_INVITE = 'https://discord.gg/pingpongshangout';
 const BOT_NAME = "PingPong's Hangout Manager";
@@ -99,26 +91,14 @@ async function checkToxicityWithSightengine(text) {
     const response = await fetch('https://api.sightengine.com/1.0/text/check.json', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text,
-        mode: 'standard',
-        lang: 'en',
-        api_user: SIGHTENGINE_API_USER,
-        api_secret: SIGHTENGINE_API_SECRET
-      })
+      body: JSON.stringify({ text, mode: 'standard', lang: 'en', api_user: SIGHTENGINE_API_USER, api_secret: SIGHTENGINE_API_SECRET })
     });
-
     const data = await response.json();
-    
     const profanityMatches = data?.profanity?.matches?.length || 0;
     const insultMatches = data?.insult?.matches?.length || 0;
     const toxicityMatches = data?.toxicity?.matches?.length || 0;
-    
     return profanityMatches + insultMatches + toxicityMatches > 0;
-  } catch (error) {
-    console.error('Sightengine error:', error);
-    return null;
-  }
+  } catch (error) { return null; }
 }
 
 // ==================== SUPABASE FUNCTIONS ====================
@@ -408,61 +388,30 @@ client.on(Events.GuildMemberAdd, async (member) => {
           const trackingChannel = member.guild.channels.cache.get(INVITE_TRACKING_CHANNEL_ID);
           if (trackingChannel) {
             const inviteEmbed = new EmbedBuilder()
-              .setDescription(`<@${member.id}> have just joined through <@${inviter.id}> link!\n\n🔒 **Buttons will unlock in 3 hours** if the user stays on the server.`)
+              .setDescription(`<@${member.id}> have just joined through <@${inviter.id}> link!\n\n⚠️ **Reward will be available in 3 hours** if the user stays on the server.`)
               .setColor(0xFFD700)
               .setTimestamp();
 
             const claimButton = new ButtonBuilder()
               .setCustomId(`invite_reward_claim_${inviter.id}`)
-              .setLabel('CLAIM (Locked)')
-              .setStyle(ButtonStyle.Secondary)
-              .setEmoji('🔒')
-              .setDisabled(true);
+              .setLabel('CLAIM')
+              .setStyle(ButtonStyle.Success)
+              .setEmoji('✅');
 
             const saveButton = new ButtonBuilder()
               .setCustomId(`invite_reward_save_${inviter.id}`)
-              .setLabel('SAVE IT (Locked)')
-              .setStyle(ButtonStyle.Secondary)
-              .setEmoji('🔒')
-              .setDisabled(true);
+              .setLabel('SAVE IT')
+              .setStyle(ButtonStyle.Primary)
+              .setEmoji('💾');
 
             const row = new ActionRowBuilder().addComponents(claimButton, saveButton);
-            const msg = await trackingChannel.send({ embeds: [inviteEmbed], components: [row] });
-
-            // Unlock after 3 hours
-            setTimeout(async () => {
-              try {
-                const unlockedClaimButton = new ButtonBuilder()
-                  .setCustomId(`invite_reward_claim_${inviter.id}`)
-                  .setLabel('CLAIM')
-                  .setStyle(ButtonStyle.Success)
-                  .setEmoji('✅')
-                  .setDisabled(false);
-
-                const unlockedSaveButton = new ButtonBuilder()
-                  .setCustomId(`invite_reward_save_${inviter.id}`)
-                  .setLabel('SAVE IT')
-                  .setStyle(ButtonStyle.Primary)
-                  .setEmoji('💾')
-                  .setDisabled(false);
-
-                const unlockedRow = new ActionRowBuilder().addComponents(unlockedClaimButton, unlockedSaveButton);
-                const unlockedEmbed = new EmbedBuilder()
-                  .setDescription(`<@${member.id}> have just joined through <@${inviter.id}> link!\n\n✅ **Buttons unlocked!** You can now claim or save your reward.`)
-                  .setColor(0x00FF00)
-                  .setTimestamp();
-
-                await msg.edit({ embeds: [unlockedEmbed], components: [unlockedRow] });
-              } catch (error) {}
-            }, 3 * 60 * 60 * 1000);
+            await trackingChannel.send({ embeds: [inviteEmbed], components: [row] });
           }
         }
         inviteCache.set(invite.code, { inviterId: invite.inviter?.id, uses: invite.uses || 0 });
       }
     }
-  } catch (error) {
-    console.error('Error tracking invites:', error);
-  }
+  } catch (error) {}
 });
 
 client.on(Events.InviteCreate, async (invite) => {
@@ -538,9 +487,9 @@ client.on(Events.MessageCreate, async (message) => {
 // ==================== STAFF STATUS ====================
 let staffOnline = false;
 
-async function updateStaffPanel() {
+async function updateStaffPanel(channelId) {
   try {
-    const channel = client.channels.cache.get(STAFF_STATUS_CHANNEL_ID);
+    const channel = client.channels.cache.get(channelId);
     if (!channel) return;
     
     const color = staffOnline ? 0x00FF00 : 0xFF0000;
@@ -550,22 +499,12 @@ async function updateStaffPanel() {
       : 'Our Staff Team is currently **offline**.\n\nPlease be patient, we will respond when we\'re back! 😴';
     
     const embed = new EmbedBuilder().setTitle(title).setDescription(description).setColor(color).setFooter({ text: BOT_NAME }).setTimestamp();
-    
     const onlineButton = new ButtonBuilder().setCustomId('staff_online').setLabel('ONLINE').setStyle(ButtonStyle.Success).setEmoji('🟢');
     const offlineButton = new ButtonBuilder().setCustomId('staff_offline').setLabel('OFFLINE').setStyle(ButtonStyle.Danger).setEmoji('🔴');
     const row = new ActionRowBuilder().addComponents(onlineButton, offlineButton);
     
-    const messages = await channel.messages.fetch({ limit: 5 });
-    const existing = messages.find(m => m.embeds[0]?.title?.includes('STAFF TEAM'));
-    
-    if (existing) {
-      await existing.edit({ embeds: [embed], components: [row] });
-    } else {
-      await channel.send({ embeds: [embed], components: [row] });
-    }
-  } catch (error) {
-    console.error('Error updating staff panel:', error);
-  }
+    await channel.send({ embeds: [embed], components: [row] });
+  } catch (error) {}
 }
 
 // ==================== EVENT: CLIENT READY ====================
@@ -583,125 +522,10 @@ client.once(Events.ClientReady, async (c) => {
     } catch (error) {}
   }
 
-  await updateStaffPanel();
-
-  // Cool panels
-  try {
-    const rulesChannel = c.channels.cache.get(RULES_CHANNEL_ID);
-    if (rulesChannel) {
-      const embed = new EmbedBuilder().setTitle('📜 **SERVER RULES** 📜').setDescription('@everyone\n\n**Please read the rules below.**\n\n🚫 **Advertising**\nWe do not allow any forms of advertising, without Staff Approval.\n\n👮 **Respect the staff team**\nBe polite to our staff team. They\'re here to help. Use manners when asking for support.\n\n📢 **Mentions**\nWe do not allow mass mentions, or randomly pinging users without reason.\n\n🆘 **Support**\nWhen asking for support please ensure you are giving us as much information as you can including screenshots, this will help us get to the root of your issue!\n\n🚫 **Discrimination not tolerated**\nWe do not tolerate any form of racism, homophobia or sexism or generally any other -ism or phobia.\n\n📧 **Spamming**\nSpamming, Character Flooding, Voguer language, Cussing, and harassing any members/channels on our Discord is prohibited.\n\n🚫 **Don\'t ping staff!**\nUnless its urgent, pinging staff when you opened a ticket will make us not answer for longer.\n\n🔧 **Use support channels for help**\nOpen a ticket for help, we have a turn around time of up to 48 hours for some tickets when busy.').setColor(0xFF0000).setFooter({ text: BOT_NAME }).setTimestamp();
-      await rulesChannel.send({ embeds: [embed] });
-    }
-  } catch (error) {}
-
-  try {
-    const pricesChannel = c.channels.cache.get(PRICES_CHANNEL_ID);
-    if (pricesChannel) {
-      const embed = new EmbedBuilder().setTitle('💰 **PRICES** 💰').setDescription('These are the prices we offer for now. Each day can bring discounts or discount codes. Check our Promo Codes Channel everyday to be well informed.\n\n**SELL**\n50M - 1.5$\n100M - 3$\n150M - 5$\n200M - 6.5$\n250M - 7.5$\n500M - 13$\n1B - 26$\nElytra (NON DUPED!) - 13$\n\nWe accept PayPal/Card/Giftcards/LTC/BTC/Stripe\n\nIf you are interested, please open a ***ticket.***\n\n**BUY**\n1B/14$').setColor(0xFFD700).setFooter({ text: BOT_NAME }).setTimestamp();
-      await pricesChannel.send({ embeds: [embed] });
-    }
-  } catch (error) {}
-
-  try {
-    const mediaChannel = c.channels.cache.get(MEDIA_REQUIREMENTS_CHANNEL_ID);
-    if (mediaChannel) {
-      const embed = new EmbedBuilder().setTitle('📸 **MEDIA REQUIREMENTS** 📸').setDescription('**These are the current Media Requirements. These can change depending on the spot availability.**\n\n📺 At least **500 subscribers** when posting on YouTube.\n\n📱 At least **1000 followers** when posting on TikTok or Instagram.\n\n🎬 Post at least **2 videos per week**.\n\n✅ Need to have **verified Discord account** (Email Address).\n\n🎮 Play on **DonutSMP**.\n\n🔗 Put our **Discord server link** visible on screen during videos/streams for full duration and make it completely visible and readable.\n\n📝 Put our **Discord server link** in your channel BIO.').setColor(0x9B59B6).setFooter({ text: BOT_NAME }).setTimestamp();
-      await mediaChannel.send({ embeds: [embed] });
-    }
-  } catch (error) {}
-
-  try {
-    const rewardsChannel = c.channels.cache.get(REWARDS_INFO_CHANNEL_ID);
-    if (rewardsChannel) {
-      const embed = new EmbedBuilder().setTitle('🎁 **HOW TO EARN REWARDS** 🎁').setDescription('**You can earn saved rewards in two ways:**\n\n💌 **Invite Someone** – When a user joins through YOUR invite link, you get 1 Invite Reward (5M).\n\n🚀 **Boost The Server** – When you boost our server, you get 1 Boost Reward (20M).\n\n**Saving Your Rewards:**\n\nWhen someone joins through your link, you\'ll see two buttons:\n✅ **CLAIM** – Opens a ticket immediately to claim your reward.\n💾 **SAVE IT** – Saves your reward to your balance for later.\n\n💡 *Pro Tip: Save up multiple rewards and cash them out all at once!*\n\n**Checking Your Balance:**\n\nHead over to the Cashout Panel channel and click **CHECK BALANCE**.\n\nYou\'ll see your saved invites, boosts and total balance.\n\n**Cashing Out:**\n\nWhen you\'re ready to claim your rewards, go to the Cashout Panel and click **CASH OUT**.\n\nA ticket will be opened with your total balance for staff to process.\n\n🎉 **Happy Earning!** 🎉').setColor(0x9B59B6).setFooter({ text: BOT_NAME }).setTimestamp();
-      await rewardsChannel.send({ embeds: [embed] });
-    }
-  } catch (error) {}
-
-  try {
-    const ticketPanelChannel = c.channels.cache.get(TICKET_PANEL_CHANNEL_ID);
-    if (ticketPanelChannel) {
-      const embed = new EmbedBuilder().setTitle('🎫 **CREATE A TICKET** 🎫').setDescription('**Need help? Select a category below and our Staff Team will assist you!**\n\n✨ **How it works:**\n1️⃣ Choose the type of support you need from the dropdown menu\n2️⃣ A private ticket channel will be created for you\n3️⃣ Our Staff Team will claim and assist you shortly\n\n⏳ *Please wait patiently after creating your ticket.*').setColor(0x00AE86).setFooter({ text: BOT_NAME }).setTimestamp();
-      const select = new StringSelectMenuBuilder().setCustomId('ticket_type').setPlaceholder('🔍 Choose a ticket type...').addOptions([
-        { label: '💸 Purchase', value: 'purchase' }, { label: '🌐 Support', value: 'support' }, { label: '📸 Media', value: 'media' }, { label: '👥 Partnership', value: 'partnership' }, { label: '💎 Sponsor', value: 'sponsor' }, { label: '🎁 Invite/Boost Reward Claim', value: 'invite-boost' }
-      ]);
-      const row = new ActionRowBuilder().addComponents(select);
-      await ticketPanelChannel.send({ embeds: [embed], components: [row] });
-    }
-  } catch (error) {}
-
-  try {
-    const suggestionPanelChannel = c.channels.cache.get(SUGGESTION_PANEL_CHANNEL_ID);
-    if (suggestionPanelChannel) {
-      const embed = new EmbedBuilder().setTitle('💡 **SUGGESTIONS** 💡').setDescription('**Got an idea to improve our server or bot? We\'d love to hear it!**\n\n✨ **How to submit:**\n1️⃣ Click the button below\n2️⃣ Write your suggestion in the form\n3️⃣ Submit it for our Staff Team to review\n\n🌟 *Your feedback helps us grow!*').setColor(0x9B59B6).setFooter({ text: BOT_NAME }).setTimestamp();
-      const suggestButton = new ButtonBuilder().setCustomId('open_suggestion_modal').setLabel('Suggest').setStyle(ButtonStyle.Primary).setEmoji('💡');
-      const row = new ActionRowBuilder().addComponents(suggestButton);
-      await suggestionPanelChannel.send({ embeds: [embed], components: [row] });
-    }
-  } catch (error) {}
-
-  try {
-    const cashoutChannel = c.channels.cache.get(CASHOUT_PANEL_CHANNEL_ID);
-    if (cashoutChannel) {
-      const cashoutEmbed = new EmbedBuilder().setTitle('💰 **REWARD CASHOUT** 💰').setDescription('✨ **Click the button below to check your balance or cash out!** ✨\n\n**Available actions:**\n🔄 **CASH OUT** – Choose amount and open a ticket\n📊 **CHECK BALANCE** – Shows your saved invites, boosts and balance\n\n🎉 *Good luck and thank you for supporting our community!* 🎉').setColor(0x9B59B6).setFooter({ text: BOT_NAME }).setTimestamp();
-      const cashoutButton = new ButtonBuilder().setCustomId('cashout_button').setLabel('CASH OUT').setStyle(ButtonStyle.Success).setEmoji('💰');
-      const checkBalanceButton = new ButtonBuilder().setCustomId('check_balance_button').setLabel('CHECK BALANCE').setStyle(ButtonStyle.Primary).setEmoji('📊');
-      const row = new ActionRowBuilder().addComponents(cashoutButton, checkBalanceButton);
-      await cashoutChannel.send({ embeds: [cashoutEmbed], components: [row] });
-    }
-  } catch (error) {}
-
-  // Leaderboard panels with timer
-  try {
-    const lbChannel = c.channels.cache.get(LEADERBOARD_CHANNEL_ID);
-    if (lbChannel) {
-      const inviteLB = await getTopInvites();
-      const inviteDesc = inviteLB.length > 0 ? inviteLB.map((item, i) => `**${i+1}.** <@${item.user_id}> - ${item.invites} invite(s)`).join('\n') : 'No invites yet.';
-      const inviteEmbed = new EmbedBuilder().setTitle('💌 **TOP 5 INVITES**').setDescription(inviteDesc).setColor(0x3498DB).setFooter({ text: `${BOT_NAME} • Resets in 1 hour` }).setTimestamp();
-      const invitePositionButton = new ButtonBuilder().setCustomId('lb_invite_position').setLabel('My Position').setStyle(ButtonStyle.Primary).setEmoji('📊');
-      const inviteRow = new ActionRowBuilder().addComponents(invitePositionButton);
-      await lbChannel.send({ embeds: [inviteEmbed], components: [inviteRow] });
-
-      const boostLB = await getTopBoosts();
-      const boostDesc = boostLB.length > 0 ? boostLB.map((item, i) => `**${i+1}.** <@${item.user_id}> - ${item.boosts} boost(s)`).join('\n') : 'No boosts yet.';
-      const boostEmbed = new EmbedBuilder().setTitle('🚀 **TOP 5 BOOSTS**').setDescription(boostDesc).setColor(0xE74C3C).setFooter({ text: `${BOT_NAME} • Resets in 1 hour` }).setTimestamp();
-      const boostPositionButton = new ButtonBuilder().setCustomId('lb_boost_position').setLabel('My Position').setStyle(ButtonStyle.Primary).setEmoji('📊');
-      const boostRow = new ActionRowBuilder().addComponents(boostPositionButton);
-      await lbChannel.send({ embeds: [boostEmbed], components: [boostRow] });
-
-      const moneyLB = await getTopMoney();
-      const moneyDesc = moneyLB.length > 0 ? moneyLB.map((item, i) => `**${i+1}.** <@${item.user_id}> - ${item.money}M`).join('\n') : 'No money yet.';
-      const moneyEmbed = new EmbedBuilder().setTitle('💰 **TOP 5 MONEY**').setDescription(moneyDesc).setColor(0xF1C40F).setFooter({ text: `${BOT_NAME} • Resets in 1 hour` }).setTimestamp();
-      const moneyPositionButton = new ButtonBuilder().setCustomId('lb_money_position').setLabel('My Position').setStyle(ButtonStyle.Primary).setEmoji('📊');
-      const moneyRow = new ActionRowBuilder().addComponents(moneyPositionButton);
-      await lbChannel.send({ embeds: [moneyEmbed], components: [moneyRow] });
-
-      setInterval(async () => {
-        try {
-          const messages = await lbChannel.messages.fetch({ limit: 10 });
-          
-          const inviteLB2 = await getTopInvites();
-          const inviteDesc2 = inviteLB2.length > 0 ? inviteLB2.map((item, i) => `**${i+1}.** <@${item.user_id}> - ${item.invites} invite(s)`).join('\n') : 'No invites yet.';
-          const inviteMsg = messages.find(m => m.embeds[0]?.title?.includes('TOP 5 INVITES'));
-          if (inviteMsg) { const embed = EmbedBuilder.from(inviteMsg.embeds[0]); embed.setDescription(inviteDesc2); embed.setTimestamp(); await inviteMsg.edit({ embeds: [embed] }); }
-
-          const boostLB2 = await getTopBoosts();
-          const boostDesc2 = boostLB2.length > 0 ? boostLB2.map((item, i) => `**${i+1}.** <@${item.user_id}> - ${item.boosts} boost(s)`).join('\n') : 'No boosts yet.';
-          const boostMsg = messages.find(m => m.embeds[0]?.title?.includes('TOP 5 BOOSTS'));
-          if (boostMsg) { const embed = EmbedBuilder.from(boostMsg.embeds[0]); embed.setDescription(boostDesc2); embed.setTimestamp(); await boostMsg.edit({ embeds: [embed] }); }
-
-          const moneyLB2 = await getTopMoney();
-          const moneyDesc2 = moneyLB2.length > 0 ? moneyLB2.map((item, i) => `**${i+1}.** <@${item.user_id}> - ${item.money}M`).join('\n') : 'No money yet.';
-          const moneyMsg = messages.find(m => m.embeds[0]?.title?.includes('TOP 5 MONEY'));
-          if (moneyMsg) { const embed = EmbedBuilder.from(moneyMsg.embeds[0]); embed.setDescription(moneyDesc2); embed.setTimestamp(); await moneyMsg.edit({ embeds: [embed] }); }
-        } catch (error) { console.error('Error refreshing leaderboards:', error); }
-      }, 60 * 60 * 1000);
-    }
-  } catch (error) {}
-
   const commands = [
     new SlashCommandBuilder().setName('ticket').setDescription('Create a ticket panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
     new SlashCommandBuilder().setName('suggest').setDescription('Create a suggestion panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder().setName('staffstatus').setDescription('Create a staff status panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
     new SlashCommandBuilder().setName('gcreate').setDescription('Create a giveaway').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .addStringOption(opt => opt.setName('name').setDescription('Giveaway name').setRequired(true))
       .addIntegerOption(opt => opt.setName('duration').setDescription('Duration in minutes').setRequired(true))
@@ -823,14 +647,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.customId === 'staff_online') {
       if (!isStaff(interaction.member)) return interaction.reply({ content: 'Only staff can change status!', ephemeral: true });
       staffOnline = true;
-      await updateStaffPanel();
+      await updateStaffPanel(interaction.channelId);
       await interaction.reply({ content: 'Staff Team is now ONLINE!', ephemeral: true });
     }
 
     if (interaction.customId === 'staff_offline') {
       if (!isStaff(interaction.member)) return interaction.reply({ content: 'Only staff can change status!', ephemeral: true });
       staffOnline = false;
-      await updateStaffPanel();
+      await updateStaffPanel(interaction.channelId);
       await interaction.reply({ content: 'Staff Team is now OFFLINE!', ephemeral: true });
     }
 
@@ -846,6 +670,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (interaction.user.id !== inviterId) return interaction.reply({ content: 'This claim button is only for the inviter!', ephemeral: true });
       
       const messageId = interaction.message.id;
+      const messageCreatedAt = interaction.message.createdTimestamp;
+      const elapsedHours = (Date.now() - messageCreatedAt) / (1000 * 60 * 60);
+      
+      if (elapsedHours < 3) {
+        const remainingMinutes = Math.ceil((3 - elapsedHours) * 60);
+        return interaction.reply({ content: `⏳ This reward is still locked! Please wait ${remainingMinutes} more minute(s).`, ephemeral: true });
+      }
+      
       const isProcessed = await sbIsProcessed(messageId);
       if (isProcessed) return interaction.reply({ content: 'This reward has already been claimed or saved!', ephemeral: true });
       await sbMarkProcessed(messageId);
@@ -863,6 +695,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (interaction.user.id !== inviterId) return interaction.reply({ content: 'This button is only for the inviter!', ephemeral: true });
       
       const messageId = interaction.message.id;
+      const messageCreatedAt = interaction.message.createdTimestamp;
+      const elapsedHours = (Date.now() - messageCreatedAt) / (1000 * 60 * 60);
+      
+      if (elapsedHours < 3) {
+        const remainingMinutes = Math.ceil((3 - elapsedHours) * 60);
+        return interaction.reply({ content: `⏳ This reward is still locked! Please wait ${remainingMinutes} more minute(s).`, ephemeral: true });
+      }
+      
       const isProcessed = await sbIsProcessed(messageId);
       if (isProcessed) return interaction.reply({ content: 'This reward has already been claimed or saved!', ephemeral: true });
       await sbMarkProcessed(messageId);
@@ -990,6 +830,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const row = new ActionRowBuilder().addComponents(suggestButton);
       await interaction.channel.send({ embeds: [embed], components: [row] });
       await interaction.reply({ content: 'Suggestion panel created!', ephemeral: true });
+    }
+
+    if (commandName === 'staffstatus') {
+      await updateStaffPanel(interaction.channelId);
+      await interaction.reply({ content: 'Staff status panel created!', ephemeral: true });
     }
 
     if (commandName === 'gcreate') {
