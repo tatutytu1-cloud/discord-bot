@@ -1,4 +1,3 @@
-
 // ==================== PINGPONG'S HANGOUT MANAGER BOT ====================
 // Most Powerful Bot of PingPong's Hangout
 // Made by pingpongble
