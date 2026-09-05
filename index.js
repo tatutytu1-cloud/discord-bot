@@ -69,6 +69,7 @@ const SIGHTENGINE_API_SECRET = 'JobAdkm7oXGYw3pz8DE2Hyz5UbCY2XxF';
 // Reward values
 const INVITE_REWARD_MONEY = 5;
 const BOOST_REWARD_MONEY = 20;
+const MIN_CASHOUT = 20; // Minimum cashout amount
 
 // ==================== BAD WORDS FILTER ====================
 const BAD_WORDS = [
@@ -526,6 +527,8 @@ client.once(Events.ClientReady, async (c) => {
     new SlashCommandBuilder().setName('ticket').setDescription('Create a ticket panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
     new SlashCommandBuilder().setName('suggest').setDescription('Create a suggestion panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
     new SlashCommandBuilder().setName('staffstatus').setDescription('Create a staff status panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder().setName('cashoutpanel').setDescription('Create a cashout panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder().setName('rewardspanel').setDescription('Create a rewards info panel').setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
     new SlashCommandBuilder().setName('gcreate').setDescription('Create a giveaway').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .addStringOption(opt => opt.setName('name').setDescription('Giveaway name').setRequired(true))
       .addIntegerOption(opt => opt.setName('duration').setDescription('Duration in minutes').setRequired(true))
@@ -720,9 +723,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.customId === 'cashout_button') {
       const balance = await sbGetBalance(interaction.user.id);
       const totalMoney = balance ? balance.money : 0;
-      if (totalMoney <= 0) return interaction.reply({ content: 'You have no balance to cash out.', ephemeral: true });
+      if (totalMoney < MIN_CASHOUT) {
+        return interaction.reply({ content: `❌ Minimum cashout is **${MIN_CASHOUT}M**. You only have **${totalMoney}M**.`, ephemeral: true });
+      }
       const modal = new ModalBuilder().setCustomId('cashout_amount_modal').setTitle('Cash Out');
-      const amountInput = new TextInputBuilder().setCustomId('cashout_amount').setLabel(`How much do you want to cash out? (Max: ${totalMoney}M)`).setStyle(TextInputStyle.Short).setPlaceholder('e.g. 25').setMaxLength(10).setRequired(true);
+      const amountInput = new TextInputBuilder().setCustomId('cashout_amount').setLabel(`Amount to cash out (Min: ${MIN_CASHOUT}M, Max: ${totalMoney}M)`).setStyle(TextInputStyle.Short).setPlaceholder('e.g. 25').setMaxLength(10).setRequired(true);
       modal.addComponents(new ActionRowBuilder().addComponents(amountInput));
       await interaction.showModal(modal);
     }
@@ -800,6 +805,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const amountStr = interaction.fields.getTextInputValue('cashout_amount');
       const amount = parseInt(amountStr);
       if (isNaN(amount) || amount <= 0) return interaction.reply({ content: 'Please enter a valid number.', ephemeral: true });
+      if (amount < MIN_CASHOUT) return interaction.reply({ content: `❌ Minimum cashout is **${MIN_CASHOUT}M**.`, ephemeral: true });
       const balance = await sbGetBalance(interaction.user.id);
       const currentMoney = balance ? balance.money : 0;
       if (amount > currentMoney) return interaction.reply({ content: `You only have ${currentMoney}M. Please enter a smaller amount.`, ephemeral: true });
@@ -835,6 +841,31 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (commandName === 'staffstatus') {
       await updateStaffPanel(interaction.channelId);
       await interaction.reply({ content: 'Staff status panel created!', ephemeral: true });
+    }
+
+    if (commandName === 'cashoutpanel') {
+      const cashoutEmbed = new EmbedBuilder()
+        .setTitle('💰 **REWARD CASHOUT** 💰')
+        .setDescription('✨ **Click the button below to check your balance or cash out!** ✨\n\n**Available actions:**\n🔄 **CASH OUT** – Choose amount and open a ticket (Min: **20M**)\n📊 **CHECK BALANCE** – Shows your saved invites, boosts and balance\n\n🎉 *Good luck and thank you for supporting our community!* 🎉')
+        .setColor(0x9B59B6)
+        .setFooter({ text: BOT_NAME })
+        .setTimestamp();
+      const cashoutButton = new ButtonBuilder().setCustomId('cashout_button').setLabel('CASH OUT').setStyle(ButtonStyle.Success).setEmoji('💰');
+      const checkBalanceButton = new ButtonBuilder().setCustomId('check_balance_button').setLabel('CHECK BALANCE').setStyle(ButtonStyle.Primary).setEmoji('📊');
+      const row = new ActionRowBuilder().addComponents(cashoutButton, checkBalanceButton);
+      await interaction.channel.send({ embeds: [cashoutEmbed], components: [row] });
+      await interaction.reply({ content: 'Cashout panel created!', ephemeral: true });
+    }
+
+    if (commandName === 'rewardspanel') {
+      const rewardsEmbed = new EmbedBuilder()
+        .setTitle('🎁 **HOW TO EARN REWARDS** 🎁')
+        .setDescription('**You can earn saved rewards in two ways:**\n\n💌 **Invite Someone** – When a user joins through YOUR invite link, you get 1 Invite Reward (5M).\n\n🚀 **Boost The Server** – When you boost our server, you get 1 Boost Reward (20M).\n\n**Saving Your Rewards:**\n\nWhen someone joins through your link, you\'ll see two buttons:\n✅ **CLAIM** – Opens a ticket immediately to claim your reward.\n💾 **SAVE IT** – Saves your reward to your balance for later.\n\n⚠️ **Important:** Buttons will unlock **after 3 hours** from when the user joined. The user must stay on the server.\n\n💡 *Pro Tip: Save up multiple rewards and cash them out all at once!*\n\n**Checking Your Balance:**\n\nHead over to the Cashout Panel channel and click **CHECK BALANCE**.\n\nYou\'ll see your saved invites, boosts and total balance.\n\n**Cashing Out:**\n\nWhen you\'re ready to claim your rewards, go to the Cashout Panel and click **CASH OUT**.\n\nMinimum cashout: **20M**\n\nA ticket will be opened with your total balance for staff to process.\n\n🎉 **Happy Earning!** 🎉')
+        .setColor(0x9B59B6)
+        .setFooter({ text: BOT_NAME })
+        .setTimestamp();
+      await interaction.channel.send({ embeds: [rewardsEmbed] });
+      await interaction.reply({ content: 'Rewards panel created!', ephemeral: true });
     }
 
     if (commandName === 'gcreate') {
