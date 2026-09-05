@@ -1,3 +1,4 @@
+
 // ==================== PINGPONG'S HANGOUT MANAGER BOT ====================
 // Most Powerful Bot of PingPong's Hangout
 // Made by pingpongble
@@ -53,6 +54,7 @@ const OWNER_ID = '1215207828713906222';
 
 const TICKET_LOGS_CHANNEL_ID = '1539942205475528734';
 const GIVEAWAY_CHANNEL_ID = '1539694123353772183';
+const QUICKDROP_CHANNEL_ID = '1545796779155521626';
 const SUGGESTIONS_LOGS_CHANNEL_ID = '1539969669811933204';
 const WELCOME_GOODBYE_CHANNEL_ID = '1540717176913399829';
 const INVITE_TRACKING_CHANNEL_ID = '1539999179609481366';
@@ -222,6 +224,7 @@ const client = new Client({
 });
 
 const giveaways = new Map();
+const quickdrops = new Map();
 const inviteCache = new Map();
 const claimedTickets = new Map();
 const ticketCreatedAt = new Map();
@@ -376,6 +379,33 @@ async function rerollGiveaway(giveawayId, interaction) {
   await interaction.reply({ content: 'Giveaway rerolled!', ephemeral: true });
 }
 
+// ==================== QUICKDROP FUNCTIONS ====================
+async function endQuickdrop(quickdropId) {
+  const quickdrop = quickdrops.get(quickdropId);
+  if (!quickdrop) return;
+
+  const { channelId, prize } = quickdrop;
+  const channel = client.channels.cache.get(channelId);
+  if (!channel) return;
+
+  const participants = quickdrop.participants || [];
+  if (participants.length === 0) {
+    await channel.send('No one claimed the quickdrop!');
+    quickdrops.delete(quickdropId);
+    return;
+  }
+
+  const winner = participants[Math.floor(Math.random() * participants.length)];
+  const winnerEmbed = new EmbedBuilder()
+    .setTitle('⚡ Quickdrop Winner!')
+    .setDescription(`<@${winner}> You won the Quickdrop! Prize: **${prize}**`)
+    .setColor(0xFFD700)
+    .setTimestamp();
+
+  await channel.send({ embeds: [winnerEmbed] });
+  quickdrops.delete(quickdropId);
+}
+
 // ==================== WELCOME/FAREWELL/BAN/KICK ====================
 client.on(Events.GuildMemberAdd, async (member) => {
   const channel = member.guild.channels.cache.get(WELCOME_GOODBYE_CHANNEL_ID);
@@ -398,18 +428,8 @@ client.on(Events.GuildMemberAdd, async (member) => {
               .setColor(0xFFD700)
               .setTimestamp();
 
-            const claimButton = new ButtonBuilder()
-              .setCustomId(`invite_reward_claim_${inviter.id}`)
-              .setLabel('CLAIM')
-              .setStyle(ButtonStyle.Success)
-              .setEmoji('✅');
-
-            const saveButton = new ButtonBuilder()
-              .setCustomId(`invite_reward_save_${inviter.id}`)
-              .setLabel('SAVE IT')
-              .setStyle(ButtonStyle.Primary)
-              .setEmoji('💾');
-
+            const claimButton = new ButtonBuilder().setCustomId(`invite_reward_claim_${inviter.id}`).setLabel('CLAIM').setStyle(ButtonStyle.Success).setEmoji('✅');
+            const saveButton = new ButtonBuilder().setCustomId(`invite_reward_save_${inviter.id}`).setLabel('SAVE IT').setStyle(ButtonStyle.Primary).setEmoji('💾');
             const row = new ActionRowBuilder().addComponents(claimButton, saveButton);
             await trackingChannel.send({ embeds: [inviteEmbed], components: [row] });
           }
@@ -521,15 +541,8 @@ async function updateLegitPanel() {
 
     const embed = new EmbedBuilder()
       .setTitle('🔍 **ARE WE LEGIT?** 🔍')
-      .setDescription(
-        '**Vote based on your experience with us!**\n\n' +
-        '✅ **YES** – Add +1 to our legitimacy score\n' +
-        '❌ **NO** – You must provide proof (otherwise ban)\n\n' +
-        `**Current Legit Votes:** ${legitVotes}`
-      )
-      .setColor(0x9B59B6)
-      .setFooter({ text: BOT_NAME })
-      .setTimestamp();
+      .setDescription('**Vote based on your experience with us!**\n\n✅ **YES** – Add +1 to our legitimacy score\n❌ **NO** – You must provide proof (otherwise ban)\n\n' + `**Current Legit Votes:** ${legitVotes}`)
+      .setColor(0x9B59B6).setFooter({ text: BOT_NAME }).setTimestamp();
 
     const yesButton = new ButtonBuilder().setCustomId('legit_yes').setLabel('✅').setStyle(ButtonStyle.Success);
     const noButton = new ButtonBuilder().setCustomId('legit_no').setLabel('❌').setStyle(ButtonStyle.Danger);
@@ -574,6 +587,9 @@ client.once(Events.ClientReady, async (c) => {
       .addStringOption(opt => opt.setName('prize').setDescription('Prize description').setRequired(true))
       .addStringOption(opt => opt.setName('description').setDescription('Giveaway description').setRequired(false))
       .addIntegerOption(opt => opt.setName('winners').setDescription('Number of winners').setRequired(false)),
+    new SlashCommandBuilder().setName('quickdrop').setDescription('Create a quickdrop (fast giveaway)').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addStringOption(opt => opt.setName('prize').setDescription('Prize description').setRequired(true))
+      .addIntegerOption(opt => opt.setName('duration').setDescription('Duration in seconds').setRequired(true)),
     new SlashCommandBuilder().setName('embed').setDescription('Send an embed via webhook').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .addChannelOption(opt => opt.setName('channel').setDescription('Target channel').setRequired(true))
       .addStringOption(opt => opt.setName('title').setDescription('Embed title').setRequired(true))
@@ -689,6 +705,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.reply({ content: 'You entered the giveaway! Good luck! 🎉', ephemeral: true });
     }
 
+    if (interaction.customId.startsWith('enter_quickdrop_')) {
+      const quickdropId = interaction.customId.replace('enter_quickdrop_', '');
+      const quickdrop = quickdrops.get(quickdropId);
+      if (!quickdrop) return interaction.reply({ content: 'This quickdrop has ended!', ephemeral: true });
+      if (!quickdrop.participants) quickdrop.participants = [];
+      if (quickdrop.participants.includes(interaction.user.id)) return interaction.reply({ content: 'You already entered!', ephemeral: true });
+      quickdrop.participants.push(interaction.user.id);
+      await interaction.reply({ content: '⚡ You entered the quickdrop!', ephemeral: true });
+    }
+
     if (interaction.customId.startsWith('claim_giveaway_')) {
       const parts = interaction.customId.split('_');
       const winnerId = parts[parts.length - 1];
@@ -725,20 +751,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.customId.startsWith('invite_reward_claim_')) {
       const inviterId = interaction.customId.replace('invite_reward_claim_', '');
       if (interaction.user.id !== inviterId) return interaction.reply({ content: 'This claim button is only for the inviter!', ephemeral: true });
-      
       const messageId = interaction.message.id;
       const messageCreatedAt = interaction.message.createdTimestamp;
       const elapsedHours = (Date.now() - messageCreatedAt) / (1000 * 60 * 60);
-      
       if (elapsedHours < 3) {
         const remainingMinutes = Math.ceil((3 - elapsedHours) * 60);
         return interaction.reply({ content: `⏳ This reward is still locked! Please wait ${remainingMinutes} more minute(s).`, ephemeral: true });
       }
-      
       const isProcessed = await sbIsProcessed(messageId);
       if (isProcessed) return interaction.reply({ content: 'This reward has already been claimed or saved!', ephemeral: true });
       await sbMarkProcessed(messageId);
-      
       const balance = await sbGetBalance(interaction.user.id);
       const totalInvites = balance ? balance.invites : 0;
       const totalBoosts = balance ? balance.boosts : 0;
@@ -750,27 +772,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.customId.startsWith('invite_reward_save_')) {
       const inviterId = interaction.customId.replace('invite_reward_save_', '');
       if (interaction.user.id !== inviterId) return interaction.reply({ content: 'This button is only for the inviter!', ephemeral: true });
-      
       const messageId = interaction.message.id;
       const messageCreatedAt = interaction.message.createdTimestamp;
       const elapsedHours = (Date.now() - messageCreatedAt) / (1000 * 60 * 60);
-      
       if (elapsedHours < 3) {
         const remainingMinutes = Math.ceil((3 - elapsedHours) * 60);
         return interaction.reply({ content: `⏳ This reward is still locked! Please wait ${remainingMinutes} more minute(s).`, ephemeral: true });
       }
-      
       const isProcessed = await sbIsProcessed(messageId);
       if (isProcessed) return interaction.reply({ content: 'This reward has already been claimed or saved!', ephemeral: true });
       await sbMarkProcessed(messageId);
-      
       const balance = await sbGetBalance(interaction.user.id);
       const currentInvites = balance ? balance.invites : 0;
       const currentBoosts = balance ? balance.boosts : 0;
       const currentMoney = balance ? balance.money : 0;
-      
       await sbUpdateBalance(interaction.user.id, currentInvites + 1, currentBoosts, currentMoney + INVITE_REWARD_MONEY);
-      
       await interaction.reply({ content: `You saved your invite reward! Saved invites: **${currentInvites + 1}**\n💰 **Saved Balance:** ${currentMoney + INVITE_REWARD_MONEY}M`, ephemeral: true });
     }
 
@@ -898,10 +914,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     if (commandName === 'cashoutpanel') {
-      const cashoutEmbed = new EmbedBuilder()
-        .setTitle('💰 **REWARD CASHOUT** 💰')
-        .setDescription('✨ **Click the button below to check your balance or cash out!** ✨\n\n**Available actions:**\n🔄 **CASH OUT** – Choose amount and open a ticket (Min: **20M**)\n📊 **CHECK BALANCE** – Shows your saved invites, boosts and balance\n\n🎉 *Good luck and thank you for supporting our community!* 🎉')
-        .setColor(0x9B59B6).setFooter({ text: BOT_NAME }).setTimestamp();
+      const cashoutEmbed = new EmbedBuilder().setTitle('💰 **REWARD CASHOUT** 💰').setDescription('✨ **Click the button below to check your balance or cash out!** ✨\n\n**Available actions:**\n🔄 **CASH OUT** – Choose amount and open a ticket (Min: **20M**)\n📊 **CHECK BALANCE** – Shows your saved invites, boosts and balance\n\n🎉 *Good luck and thank you for supporting our community!* 🎉').setColor(0x9B59B6).setFooter({ text: BOT_NAME }).setTimestamp();
       const cashoutButton = new ButtonBuilder().setCustomId('cashout_button').setLabel('CASH OUT').setStyle(ButtonStyle.Success).setEmoji('💰');
       const checkBalanceButton = new ButtonBuilder().setCustomId('check_balance_button').setLabel('CHECK BALANCE').setStyle(ButtonStyle.Primary).setEmoji('📊');
       const row = new ActionRowBuilder().addComponents(cashoutButton, checkBalanceButton);
@@ -910,10 +923,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     if (commandName === 'rewardspanel') {
-      const rewardsEmbed = new EmbedBuilder()
-        .setTitle('🎁 **HOW TO EARN REWARDS** 🎁')
-        .setDescription('**You can earn saved rewards in two ways:**\n\n💌 **Invite Someone** – When a user joins through YOUR invite link, you get 1 Invite Reward (5M).\n\n🚀 **Boost The Server** – When you boost our server, you get 1 Boost Reward (20M).\n\n**Saving Your Rewards:**\n\nWhen someone joins through your link, you\'ll see two buttons:\n✅ **CLAIM** – Opens a ticket immediately to claim your reward.\n💾 **SAVE IT** – Saves your reward to your balance for later.\n\n⚠️ **Important:** Buttons will unlock **after 3 hours** from when the user joined. The user must stay on the server.\n\n💡 *Pro Tip: Save up multiple rewards and cash them out all at once!*\n\n**Checking Your Balance:**\n\nHead over to the Cashout Panel channel and click **CHECK BALANCE**.\n\nYou\'ll see your saved invites, boosts and total balance.\n\n**Cashing Out:**\n\nWhen you\'re ready to claim your rewards, go to the Cashout Panel and click **CASH OUT**.\n\nMinimum cashout: **20M**\n\nA ticket will be opened with your total balance for staff to process.\n\n🎉 **Happy Earning!** 🎉')
-        .setColor(0x9B59B6).setFooter({ text: BOT_NAME }).setTimestamp();
+      const rewardsEmbed = new EmbedBuilder().setTitle('🎁 **HOW TO EARN REWARDS** 🎁').setDescription('**You can earn saved rewards in two ways:**\n\n💌 **Invite Someone** – When a user joins through YOUR invite link, you get 1 Invite Reward (5M).\n\n🚀 **Boost The Server** – When you boost our server, you get 1 Boost Reward (20M).\n\n**Saving Your Rewards:**\n\nWhen someone joins through your link, you\'ll see two buttons:\n✅ **CLAIM** – Opens a ticket immediately to claim your reward.\n💾 **SAVE IT** – Saves your reward to your balance for later.\n\n⚠️ **Important:** Buttons will unlock **after 3 hours** from when the user joined. The user must stay on the server.\n\n💡 *Pro Tip: Save up multiple rewards and cash them out all at once!*\n\n**Checking Your Balance:**\n\nHead over to the Cashout Panel channel and click **CHECK BALANCE**.\n\nYou\'ll see your saved invites, boosts and total balance.\n\n**Cashing Out:**\n\nWhen you\'re ready to claim your rewards, go to the Cashout Panel and click **CASH OUT**.\n\nMinimum cashout: **20M**\n\nA ticket will be opened with your total balance for staff to process.\n\n🎉 **Happy Earning!** 🎉').setColor(0x9B59B6).setFooter({ text: BOT_NAME }).setTimestamp();
       await interaction.channel.send({ embeds: [rewardsEmbed] });
       await interaction.reply({ content: 'Rewards panel created!', ephemeral: true });
     }
@@ -940,6 +950,22 @@ client.on(Events.InteractionCreate, async (interaction) => {
       giveaways.set(giveawayId, { channelId: giveawayChannel.id, messageId: msg.id, prize, winnersCount, participants: [], hosterId: interaction.user.id });
       setTimeout(() => endGiveaway(giveawayId), duration * 60000);
       await interaction.reply({ content: 'Giveaway created!', ephemeral: true });
+    }
+
+    if (commandName === 'quickdrop') {
+      const prize = interaction.options.getString('prize');
+      const duration = interaction.options.getInteger('duration');
+      const quickdropId = Date.now().toString();
+      const endTime = Date.now() + duration * 1000;
+      const embed = new EmbedBuilder().setTitle('⚡ **QUICKDROP** ⚡').setDescription(`**Prize:** ${prize}\n**Ends:** <t:${Math.floor(endTime / 1000)}:R>\n\nClick the button below to enter!`).setColor(0xFF4500).setFooter({ text: 'Be fast!' }).setTimestamp();
+      const enterButton = new ButtonBuilder().setCustomId(`enter_quickdrop_${quickdropId}`).setLabel('Enter').setStyle(ButtonStyle.Primary).setEmoji('⚡');
+      const row = new ActionRowBuilder().addComponents(enterButton);
+      const quickdropChannel = interaction.guild.channels.cache.get(QUICKDROP_CHANNEL_ID);
+      if (!quickdropChannel) return interaction.reply({ content: 'Quickdrop channel not found!', ephemeral: true });
+      const msg = await quickdropChannel.send({ embeds: [embed], components: [row] });
+      quickdrops.set(quickdropId, { channelId: quickdropChannel.id, messageId: msg.id, prize, participants: [] });
+      setTimeout(() => endQuickdrop(quickdropId), duration * 1000);
+      await interaction.reply({ content: 'Quickdrop created!', ephemeral: true });
     }
 
     if (commandName === 'embed') {
